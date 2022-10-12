@@ -131,8 +131,12 @@ class ReferenceData(BaseData):
     def __init__(self, clear_json_attrs: bool=True):
         super().__init__(clear_json_attrs=clear_json_attrs)
         
-        self._player_scores_wk_1_id = 78
-        
+        self.auth_header = {'accept': 'application/json'}
+
+        # week ID seems right but can't find the correct url for it
+        # self._player_scores_wk_1_id = 78
+        self._player_scores_wk_1_id = 1186
+
         self.url_players = 'https://stats.underdogfantasy.com/v1/slates/' + self.slate_id + '/players'
         self.url_appearances = 'https://stats.underdogfantasy.com/v1/slates/' + self.slate_id + '/scoring_types/ccf300b0-9197-5951-bd96-cba84ad71e86/appearances'
         self.url_teams = 'https://stats.underdogfantasy.com/v1/teams'
@@ -154,8 +158,11 @@ class ReferenceData(BaseData):
             if attr == 'df_players_master':
                 pass
             else:
-                method_name = 'create_'+ attr
-                self.__dict__[attr] = getattr(self, method_name)()
+                try:
+                    method_name = 'create_'+ attr
+                    self.__dict__[attr] = getattr(self, method_name)()
+                except:
+                    print(getattr(self, method_name), 'failed to run')
         
         # This ensures the dfs it depends on are created
         self.df_players_master = self.create_df_players_master()
@@ -164,7 +171,7 @@ class ReferenceData(BaseData):
             self.clear_json_attrs()  
         
     def create_df_players(self) -> pd.DataFrame:
-        self.json_players = self.read_in_site_data(self.url_players)
+        self.json_players = self.read_in_site_data(self.url_players, headers=self.auth_header)
         
         initial_scraped_df = self.create_scraped_data_df(self.json_players['players'])
         initial_scraped_df.drop(['image_url'], axis=1, inplace=True)
@@ -173,7 +180,8 @@ class ReferenceData(BaseData):
         return initial_scraped_df
         
     def create_df_appearances(self) -> pd.DataFrame:
-        self.json_appearances = self.read_in_site_data(self.url_appearances)
+        self.json_appearances = self.read_in_site_data(self.url_appearances
+                                                        , headers=self.auth_header)
         
         initial_scraped_df = self.create_scraped_data_df(self.json_appearances['appearances'])
         initial_scraped_df.drop(['latest_news_item_updated_at', 'score'], axis=1, inplace=True)
@@ -196,7 +204,7 @@ class ReferenceData(BaseData):
         return final_df
     
     def create_df_teams(self) -> pd.DataFrame:
-        self.json_teams = self.read_in_site_data(self.url_teams)
+        self.json_teams = self.read_in_site_data(self.url_teams, headers=self.auth_header)
         
         initial_scraped_df = self.create_scraped_data_df(self.json_teams['teams'])
         
@@ -231,8 +239,14 @@ class ReferenceData(BaseData):
         return final_df
     
     def create_df_player_scores(self):
+        """ 
+        This no longer appears to work due to either a change in the endpoint
+        or the starting point week id is wrong
+        """
+
         self.json_player_scores = {'player_scores_wk_' + str(i + 1): 
-                                    self.read_in_site_data(self.urls_player_scores['player_scores_wk_' + str(i + 1)])
+                                    self.read_in_site_data(self.urls_player_scores['player_scores_wk_' + str(i + 1)]
+                                    , headers=self.auth_header)
                                     for i, wk_id in enumerate(range(self._player_scores_wk_1_id, self._player_scores_wk_1_id + 17))}
             
         player_scores_df_list = []
@@ -299,7 +313,10 @@ class LeagueData(BaseData):
         super().__init__(clear_json_attrs=clear_json_attrs)
         
         self.league_ids = league_ids
-        self.auth_header = {'authorization': bearer_token}
+        self.auth_header = {'authorization': bearer_token, 'accept': 'application/json'
+                                , 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) \
+                                AppleWebKit/537.36 (KHTML, like Gecko) \
+                                Chrome/99.0.4844.51 Safari/537.36'}
         
         self.url_drafts = {}
         self.url_weekly_scores = {}
@@ -398,10 +415,19 @@ class LeagueData(BaseData):
 class UserData(BaseData):
     
     def __init__(self, bearer_token: str, clear_json_attrs: bool=True):
+        """
+        Note: This requires the user-agent header - Should be able to grab this
+        with the bearer token, but hard coding for now
+        """
+
         super().__init__(clear_json_attrs=clear_json_attrs)
-        self.auth_header = {'authorization': bearer_token}
+        self.auth_header = {'authorization': bearer_token, 'accept': 'application/json'
+                                , 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) \
+                                AppleWebKit/537.36 (KHTML, like Gecko) \
+                                Chrome/99.0.4844.51 Safari/537.36'}
         
-        self.url_base_leagues = 'https://api.underdogfantasy.com/v2/user/slates/' + self.slate_id + '/completed_drafts'
+        self.url_base_leagues = 'https://api.underdogfantasy.com/v2/user/slates/' + self.slate_id + '/live_drafts'
+        # self.url_base_leagues = 'https://api.underdogfantasy.com/v2/user/slates/' + self.slate_id + '/completed_drafts'
         # self.url_base_leagues = 'https://api.underdogfantasy.com/v2/user/slates/' + self.slate_id + '/settled_drafts'
         self.url_tourney_league_ids = 'https://api.underdogfantasy.com/v1/user/slates/' + self.slate_id + '/tournament_rounds'
         
@@ -554,4 +580,4 @@ if __name__ == '__main__':
     print(bearer_token)
     
     ### Pull all major UD data elements ###
-    # underdog_data = create_underdog_df_dict(bearer_token, sleep_time=5)
+    underdog_data = create_underdog_df_dict(bearer_token, sleep_time=5)

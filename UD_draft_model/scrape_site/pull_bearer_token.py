@@ -35,7 +35,7 @@ def pull_bearer_token(url, chromedriver_path, username, password):
     
     driver = create_webdriver(url, chromedriver_path, username, password)
     
-    time.sleep(5)
+    time.sleep(20)
     logs = driver.get_log("performance")
 
     for log in logs:
