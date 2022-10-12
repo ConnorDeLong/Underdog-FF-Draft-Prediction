@@ -57,15 +57,8 @@ def pull_bearer_token(url, chromedriver_path, username, password):
 
 if __name__ == '__main__':
     
-    try:
-        import underdog_login_credentials
-    except:
-        pass
-    
     # url = "https://underdogfantasy.com/lobby"    
     # chromedriver_path = r"C:\Users\conde\chromedriver\chromedriver.exe"
-    # username = underdog_login_credentials.USERNAME
-    # password = underdog_login_credentials.PASSWORD
 
     # bearer_token = pull_bearer_token(url, chromedriver_path, username, password)
 
