@@ -144,7 +144,7 @@ if __name__ == '__main__':
     CHROMEDRIVER_PATH = '/usr/bin/chromedriver'
     URL = 'https://sam-hoppen.shinyapps.io/UD_ADP/'
     OUTPUT_FOLDER = '~/Python-Projects/UD-Draft-Model/Repo-Work/UD-Draft-Model\
-        /data/2022/player_ranks'
+    /data/2022/player_ranks'
 
     # export_day_ranks(URL, CHROMEDRIVER_PATH, '2022-10-01', '2022-10-08'
     # , OUTPUT_FOLDER, num_ranks=400)
