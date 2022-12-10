@@ -172,9 +172,9 @@ def add_ranks_lookups(df: pd.DataFrame, df_lookups: pd.DataFrame) -> pd.DataFram
     IMPORATANT: Passed df must contain draft_year
     """
 
-    df = add_lookup_vals(df, df_lookups, 'player', 'full_name', 'final_player_name')
-    df = add_lookup_vals(df, df_lookups, 'team', 'team_name', 'final_team_name')
-    df = add_lookup_vals(df, df_lookups, 'position', 'position', 'final_position')
+    df = add_lookup_vals(df, df_lookups, 'player', 'full_name', 'actual_player_name')
+    df = add_lookup_vals(df, df_lookups, 'team', 'team_name', 'actual_team_name')
+    df = add_lookup_vals(df, df_lookups, 'position', 'position', 'actual_position')
 
     # Draft date appears to be offset by a day relative to the ranks
     # for early morning drafts (or at least those with that timestamp).

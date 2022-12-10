@@ -4,3 +4,6 @@ UD_draft_model/scrape_site/__pycache__/
 UD_draft_model/scratch/
 export_data.py
 test.py
+.ipynb_checkpoints/
+.vscode/
+__pycache__/
