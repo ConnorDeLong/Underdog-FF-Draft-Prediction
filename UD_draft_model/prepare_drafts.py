@@ -24,7 +24,7 @@ def compile_ranks(folder_path: str) -> pd.DataFrame:
     df['date'] = pd.to_datetime(df['date'])
     df['year'] = df['date'].dt.year
 
-    df['final_player_id'] = df['player'] \
+    df['player_key'] = df['player'] \
                     + ' - ' + df['date'].astype('str') \
                     + ' - ' + df['adp'].astype('str')   
 
@@ -34,39 +34,7 @@ def compile_ranks(folder_path: str) -> pd.DataFrame:
     return df
 
 
-def read_lookups(folder_path: str) -> pd.DataFrame:
-    """ Reads in the draft/ranks data lookups as a df. """
-
-    df = pd.read_csv(path.join(folder_path, '2022/lookups_2022.csv'))
-
-    return df
-
-
-def add_lookup_vals(df_base: pd.DataFrame, df_lookups: pd.DataFrame, lookup_type: str
-                    , join_col_name: str, final_col_name: str) -> pd.DataFrame:
-    """ 
-    Adds the ranks_val from the df_lookups dataset to df_base based off the lookup_type
-    and updates its name to the final_col_name.
-    Point of this is for the player attributes in the drafts data to align with those
-    in the ranks data.
-    IMPORTANT: If other years ever end up being added, they must be all be found on
-    the df passed to df_lookups. Otherwise, only the last year's values will be shown.
-    """
-
-    df_base = df_base.copy()
-    df_lookups = df_lookups.loc[df_lookups['lookup_type'] == lookup_type].copy()
-
-    df = pd.merge(df_base, df_lookups, how='left'
-                , left_on=['draft_year', join_col_name]
-                , right_on=['draft_year', 'drafts_val'])
-
-    df.drop(columns=['lookup_type', 'drafts_val'], inplace=True)
-    df.rename(columns={'ranks_val': final_col_name}, inplace=True)
-
-    return df
-
-
-def read_raw_data(folder_path: str, years: list) -> pd.DataFrame:
+def read_drafts(folder_path: str, years: list) -> pd.DataFrame:
 
     dfs = []
     for year in years:
@@ -88,17 +56,51 @@ def read_raw_data(folder_path: str, years: list) -> pd.DataFrame:
                 , 'swapped', 'player_id', 'first_name', 'last_name']
     df.drop(columns=drop_vars, inplace=True)
 
+    # Noticed a draft being duplicated.
+    df.drop_duplicates(inplace=True)
+
+    return df
+
+
+def read_ranks(folder_path: str, years: list) -> pd.DataFrame:
+    """  Reads in all Ranks data. """
+
+    dfs = []
+    for year in years:
+        df = compile_ranks(path.join(DATA_FOLDER, f'{year}/player_ranks'))
+        dfs.append(df)
+    
+    df = pd.concat(dfs)
+
+    # type field only available if a custom ranks file is created.
+    try:
+        df['type'] = df['type'].fillna('actual')
+    except:
+        df['type'] = 'actual'
+
+    return df
+
+
+def read_lookups(folder_path: str, years: list) -> pd.DataFrame:
+    """ Reads in all Lookups files. """
+    dfs = []
+    for year in years:
+        df = pd.read_csv(path.join(DATA_FOLDER, f'{year}/lookups.csv'))
+        dfs.append(df)
+    
+    df = pd.concat(dfs)
+
     return df
 
 
 def update_dtypes(df: pd.DataFrame) -> pd.DataFrame:
     """ Updates columns to more appropriate dyptes. """
     
-    # Replace null adps and update to float
+    # Replace null adps and update to float.
     df['projection_adp'] = np.where(df['projection_adp'] == '-', 216, df['projection_adp'])
     df['projection_adp'] = df['projection_adp'].astype('float')
 
-    # Update created_at to datetime to use as possible filter
+    # Update created_at to datetime to use as possible filter.
     df['created_at'] = pd.to_datetime(df['created_at'], infer_datetime_format=True)
 
     return df
@@ -148,7 +150,7 @@ def _add_draft_dt(df: pd.DataFrame) -> pd.DataFrame:
 def add_draft_attrs(df: pd.DataFrame) -> pd.DataFrame:
     """ Adds draft level attributes. """
 
-    # Adds number of teams by draft
+    # Adds number of teams by draft.
     by_vars = ['draft_id', 'draft_entry_id']
     draft_teams = df[by_vars].drop_duplicates(subset=by_vars)
 
@@ -156,12 +158,68 @@ def add_draft_attrs(df: pd.DataFrame) -> pd.DataFrame:
 
     df = pd.merge(df, num_teams, on='draft_id', how='left')
 
-    # Adds round and pick of the round by draft
+    # Adds round and pick of the round by draft.
     df['round'] = ((df['number'] - 1) / df['num_teams']).astype('int') + 1
     df['round_pick'] = df['number'] - ((df['round'] - 1) * df['num_teams'])
 
-    # Add datetime, date, and year of draft and year
+    # Add datetime, date, and year of draft and year.
     df = _add_draft_dt(df)
+
+    return df
+
+
+def add_draft_rank_type(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    This adds a rank_type column to the df which is required to determine
+    if the date in df needs to be adjusted to map to the rankings used
+    for the draft (see add_ranks_lookups function).
+
+    IMPORTANT: The logic for this will need updated if more custom
+    ranks are ever added.
+
+    NO LONGER NEEDED - Custom ranks also need to be offset by one
+    to prevent a player/day from having multiple adps.
+    """
+
+    df['ranks_type'] = np.where(df['draft_year'] == 2021, 'custom', 'actual')
+
+    return df
+
+
+def add_lookup_vals(df_base: pd.DataFrame, df_lookups: pd.DataFrame, lookup_type: str
+                    , join_col_name: str, final_col_name: str) -> pd.DataFrame:
+    """ 
+    Adds the ranks_val from the df_lookups dataset to df_base based off the lookup_type
+    and updates its name to the final_col_name.
+    Point of this is for the player attributes in the drafts data to align with those
+    in the ranks data.
+    IMPORTANT: If other years ever end up being added, they must be all be found on
+    the df passed to df_lookups. Otherwise, only the last year's values will be shown.
+    """
+
+    df_base = df_base.copy()
+    df_lookups = df_lookups.loc[df_lookups['lookup_type'] == lookup_type].copy()
+
+    df = pd.merge(df_base, df_lookups, how='left'
+                , left_on=['draft_year', join_col_name]
+                , right_on=['draft_year', 'drafts_val'])
+
+    df.drop(columns=['lookup_type', 'drafts_val'], inplace=True)
+    df.rename(columns={'ranks_val': final_col_name}, inplace=True)
+
+    return df
+
+
+def _add_rank_draft_date(df: pd.DataFrame, hour_thresh: int=5) -> pd.DataFrame:
+    """
+    Add a date col which aligns with the rankings that were used for the draft
+    and accounts for early morning drafts which use rankings from the prior day.
+    """
+
+    date_change_filter = (df['draft_datetime'].dt.hour <= hour_thresh)
+    df['ranks_draft_date'] = np.where(date_change_filter
+                                    , df['draft_date'] - pd.Timedelta(days=1)
+                                    , df['draft_date'])
 
     return df
 
@@ -169,26 +227,23 @@ def add_draft_attrs(df: pd.DataFrame) -> pd.DataFrame:
 def add_ranks_lookups(df: pd.DataFrame, df_lookups: pd.DataFrame) -> pd.DataFrame:
     """ 
     Adds the lookups required to map to the ranks df.
-    IMPORATANT: Passed df must contain draft_year
+    IMPORATANT: Passed df must contain draft_year.
     """
 
-    df = add_lookup_vals(df, df_lookups, 'player', 'full_name', 'actual_player_name')
-    df = add_lookup_vals(df, df_lookups, 'team', 'team_name', 'actual_team_name')
-    df = add_lookup_vals(df, df_lookups, 'position', 'position', 'actual_position')
+    df = add_lookup_vals(df, df_lookups, 'player', 'full_name', 'drafted_player')
+    df = add_lookup_vals(df, df_lookups, 'team', 'team_name', 'drafted_team')
+    df = add_lookup_vals(df, df_lookups, 'position', 'position', 'drafted_position')
+
+    df.drop(columns=['full_name', 'team_name', 'position'], inplace=True)
 
     # Draft date appears to be offset by a day relative to the ranks
     # for early morning drafts (or at least those with that timestamp).
-    df['final_draft_date'] = np.where(df['draft_datetime'].dt.hour <= 5
-                                    , df['draft_date'] - pd.Timedelta(days=1)
-                                    , df['draft_date'])
+    df = _add_rank_draft_date(df, hour_thresh=5)
 
     # Ranks data will be stacked with derived ranks from drafts w/o ranks data.
     # This will allow those drafts to link back to the stacked ranks data.
-    # IMPORTANT:
-    player = np.where(df['final_player_name'].isnull(), df['full_name']
-                    , df['final_player_name'])
-    df['final_player_id'] = player \
-                    + ' - ' + df['final_draft_date'].astype('str') \
+    df['drafted_player_key'] = df['drafted_player'] \
+                    + ' - ' + df['ranks_draft_date'].astype('str') \
                     + ' - ' + df['projection_adp'].astype('str') 
 
     return df
@@ -206,31 +261,34 @@ def _add_rank_actual(df_drafts: pd.DataFrame, df_ranks: pd.DataFrame) -> pd.Data
     keep_vars = ['player', 'date', 'adp', 'rank_actual']
     df_ranks = df_ranks[keep_vars]
 
-    rename_vars = {'player': 'final_player_name'
+    rename_vars = {'player': 'drafted_player'
                     , 'adp': 'projection_adp'
-                    , 'date': 'final_draft_date'}
+                    , 'date': 'ranks_draft_date'}
     df_ranks.rename(columns=rename_vars, inplace=True)
 
     df = pd.merge(df_base, df_ranks, how='left'
-                , on=['final_player_name', 'projection_adp', 'final_draft_date'])
+                , on=['drafted_player', 'projection_adp', 'ranks_draft_date'])
 
     return df
 
 
-def _add_rank_derived(df: pd.DataFrame) -> pd.DataFrame:
+def _add_rank_derived(df: pd.DataFrame, by_var: str=None) -> pd.DataFrame:
     """ 
-    Adds derived rank for each draft/player based off adp. 
+    Adds derived rank for each draft/player based off adp.
     Note that even early round derived ranks won't align
     with actual due to multiple players having the same ADP.
     """
 
+    if by_var is None:
+        by_var = 'draft_id'
+
     df = df.copy()
-    df.sort_values(by=['draft_id', 'projection_adp', 'number'], inplace=True)
+    df.sort_values(by=[by_var, 'projection_adp', 'number'], inplace=True)
 
     df['rank_derived'] = 1
-    df['rank_derived'] = df.groupby('draft_id')['rank_derived'].cumsum()
+    df['rank_derived'] = df.groupby(by_var)['rank_derived'].cumsum()
 
-    df.sort_values(by=['draft_date', 'draft_id', 'number'], inplace=True)
+    # df.sort_values(by=[by_var, 'number'], inplace=True)
 
     return df
 
