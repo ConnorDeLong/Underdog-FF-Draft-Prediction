@@ -391,6 +391,9 @@ def _add_avail_player_number(df_expanded: pd.DataFrame) -> pd.DataFrame:
                     , on=['draft_id', 'avail_player_key']
                     , how='left')
 
+    # Undrafted players need value to prevent being flagged as ever being picked.
+    df['avail_number'] = df['avail_number'].fillna(9999)
+
     return df
 
 
@@ -509,7 +512,7 @@ def process_data(df_drafts: pd.DataFrame, df_ranks: pd.DataFrame
     df_draft_attrs = add_draft_attrs(df_complete_players)
     df_w_rank_type = add_draft_rank_type(df_draft_attrs)
     df_w_rank_lookups = add_ranks_lookups(df_w_rank_type, df_lookups)
-    df_expanded = expand_all_drafts(df_w_rank_lookups, df_ranks, 40)
+    df_expanded = expand_all_drafts(df_w_rank_lookups, df_ranks, num_players)
     df_final = add_picked_indicator(df_expanded)
 
     return df_final
