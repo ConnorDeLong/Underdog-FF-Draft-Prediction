@@ -1,3 +1,5 @@
+""" NOTE: Use 'pip install -e .' to install in development mode """
+
 from setuptools import setup, find_packages
 
 
