@@ -468,6 +468,7 @@ def add_picked_indicator(df_expanded: pd.DataFrame) -> pd.DataFrame:
     df = _add_next_pick_number(df)
 
     df['ind_avail'] = np.where(df['avail_number'] >= df['next_pick_number'], 1, 0)
+    df['ind_picked'] = np.where(df['ind_avail'] == 1, 0, 1)
 
     return df
 
