@@ -4,27 +4,31 @@ import time
 
 
 class BaseData:
-    def __init__(self, clear_json_attrs: bool = True, slate_id: str = None):
+    def __init__(self, clear_json_attrs: bool=True):
         self._clear_json_attrs = clear_json_attrs
 
-        if slate_id is None:
-            # self.slate_id = '87a5caba-d5d7-46d9-a798-018d7c116213'
-            self.slate_id = "f659a9be-fd34-4a1e-9c43-0816267e603d"
-        else:
-            self.slate_id = slate_id
+        # user-agent and/or accept headers sometimes required
+        self.auth_header = {
+            "accept": "application/json",
+            "user-agent": "Mozilla/5.0 (X11; Linux x86_64) \
+                                AppleWebKit/537.36 (KHTML, like Gecko) \
+                                Chrome/99.0.4844.51 Safari/537.36",
+        }
 
         self._player_scores_wk_1_id = 78
         self._player_scores_wk_last_id = 78 + 17
 
-    def build_all_dfs(self, sleep_time: int = 0):
+    def build_all_dfs(self, sleep_time: int=0):
         """
         Overwrites every 'df_' attribute with a df that is created by running the
         'create_' method that matches it. This serves as the primary method
         for building the dfs associated with the class
         """
+
         attrs = [attr for attr in dir(self) if attr.startswith("df_")]
         for attr in attrs:
             method_name = "create_" + attr
+            self.__dict__[attr] = getattr(self, method_name)()
             try:
                 self.__dict__[attr] = getattr(self, method_name)()
             except:
@@ -43,12 +47,14 @@ class BaseData:
         Clears all the atttributes that hold the json data pulled from the API.
         By default, this is executed when the build_all_dfs method is run
         """
-        attrs = [attr for attr in dir(self) if attr.startswith("json_")]
+
+        attrs = [attr for attr in dir(self) if attr.startswith("json")]
         for attr in attrs:
             self.__dict__[attr] = {}
 
-    def read_in_site_data(self, url, headers: dict = None) -> dict:
+    def read_in_site_data(self, url, headers: dict=None) -> dict:
         """Pulls in the raw data from the API and returns it as a dict"""
+
         if headers is None:
             headers = {}
 
@@ -64,6 +70,7 @@ class BaseData:
         used for the columns and the values are placed in the rows.
         NOTE: this assumes the keys in all dicts are the same.
         """
+
         # Get the dicionary keys to identify the columns of the list for each output dict key
         output_data_cols = []
         for output_data_col in scraped_data[0].keys():
@@ -76,7 +83,8 @@ class BaseData:
                 try:
                     data_element = data[output_data_col]
                 except:
-                    # Note: This should probably be conditional on the data type, but just using N/A for now
+                    # Note: This should probably be conditional on the data type, 
+                    # but just using N/A for now.
                     data_element = "N/A"
 
                 all_data_elements.append(data_element)
@@ -110,6 +118,7 @@ class BaseData:
 
     def _create_week_id_mapping(self) -> pd.DataFrame:
         """Creates a map between the APIs Week ID and the actual Week number"""
+
         wk_numbers = []
         wk_ids = []
         for wk_number, wk_id in enumerate(
@@ -153,12 +162,23 @@ class DraftsDetail(BaseData):
         self.json_weekly_scores = {}
 
         self.df_drafts = pd.DataFrame()
+        self.df_draft_entries = pd.DataFrame()
         self.df_weekly_scores = pd.DataFrame()
 
     def create_df_drafts(self) -> pd.DataFrame:
         dfs = []
         for league_id in self.league_ids:
             df = self._create_df_draft_ind_league(league_id)
+            dfs.append(df)
+
+        final_df = pd.concat(dfs)
+
+        return final_df
+
+    def create_df_draft_entries(self) -> pd.DataFrame:
+        dfs = []
+        for league_id in self.league_ids:
+            df = self._create_df_draft_entries_ind_league(league_id)
             dfs.append(df)
 
         final_df = pd.concat(dfs)
@@ -191,6 +211,26 @@ class DraftsDetail(BaseData):
         initial_scraped_df["draft_id"] = league_id
 
         return initial_scraped_df
+
+    def _create_df_draft_entries_ind_league(self, league_id: str) -> pd.DataFrame:
+        """ 
+        Creates a df of all users in the draft, sorted by pick order.
+        """
+
+        json = self.read_in_site_data(self.url_drafts[league_id], self.auth_header)
+
+        df_entries = self.create_scraped_data_df(json['draft']['draft_entries'])
+        df_users = self.create_scraped_data_df(json['draft']['users'])
+
+        df_users.rename(columns={'id': 'user_id'}, inplace=True)
+        df_users = df_users[['user_id', 'username']]
+
+        df = pd.merge(df_entries, df_users, how='left', on='user_id')
+        df = df.sort_values(by='pick_order').reset_index(drop=True)
+
+        df['draft_id'] = league_id
+
+        return df
 
     def _create_df_weekly_scores_ind_league(self, league_id: str) -> pd.DataFrame:
         self.json_weekly_scores[league_id] = self.read_in_site_data(
@@ -261,7 +301,7 @@ class DraftsActive(BaseData):
 
         try:
             df = self.create_scraped_data_df(self.json["drafts"])
-            df = self._add_scoring_type(df)
+            df = self._add_contest_refs(df)
         except IndexError:
             print(f'No data found in {DraftsActive.url} - no df will be returned')
             df = None
@@ -271,20 +311,18 @@ class DraftsActive(BaseData):
 
         return df
 
-    def _add_scoring_type(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _add_contest_refs(self, df: pd.DataFrame) -> pd.DataFrame:
         """ 
         Scoring type required to get the rankings (appearances) used
-        for the draft
+        for the draft and rounds needed to build a draft shell.
         """
 
         contest_refs = ContestRefs()
         df_styles = contest_refs.create_df_contest_styles()
+        df_styles = df_styles[['id', 'scoring_type_id', 'rounds']]
         df_styles.rename(columns={'id': 'contest_style_id'}, inplace=True)
 
-        df = pd.merge(
-            df, df_styles[['contest_style_id', 'scoring_type_id']],
-            how='left', on='contest_style_id'
-        )
+        df = pd.merge(df, df_styles, how='left', on='contest_style_id')
 
         return df
 

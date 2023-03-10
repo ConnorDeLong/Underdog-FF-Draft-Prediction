@@ -28,7 +28,7 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
     df['diff_cur_rank_picks_btwn'] = df['avail_cur_rank_actual'] -\
         df['picks_btwn']
 
-    ind_rank_btwn = np.where(df['diff_cur_rank_picks_btwn'] <=0, 1, 0)
+    ind_rank_btwn = np.where(df['diff_cur_rank_picks_btwn'] <= 0, 1, 0)
     df['ind_rank_btwn'] = ind_rank_btwn
 
     return df

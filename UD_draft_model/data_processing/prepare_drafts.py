@@ -364,7 +364,7 @@ def expand_all_drafts(df: pd.DataFrame, df_ranks: pd.DataFrame
     return df_all_drafts
 
 
-def _add_avail_player_number(df_expanded: pd.DataFrame) -> pd.DataFrame:
+def add_avail_player_number(df_expanded: pd.DataFrame) -> pd.DataFrame:
     """ 
     Adds the pick each available player was actually drafted at.
     This will be used to determine if the player was available
@@ -397,7 +397,7 @@ def _add_avail_player_number(df_expanded: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def _add_next_pick_number(df_expanded: pd.DataFrame) -> pd.DataFrame:
+def add_next_pick_number(df_expanded: pd.DataFrame) -> pd.DataFrame:
     """ 
     Adds the pick number of the next time the user will draft.
     Used to determine if the player was available in the next round.
@@ -464,8 +464,8 @@ def add_picked_indicator(df_expanded: pd.DataFrame) -> pd.DataFrame:
         Draft/Pick/Available Player level draft data.
     """
 
-    df = _add_avail_player_number(df_expanded)
-    df = _add_next_pick_number(df)
+    df = add_avail_player_number(df_expanded)
+    df = add_next_pick_number(df)
 
     df['ind_avail'] = np.where(df['avail_number'] >= df['next_pick_number'], 1, 0)
     df['ind_picked'] = np.where(df['ind_avail'] == 1, 0, 1)
