@@ -397,7 +397,9 @@ def add_avail_player_number(df_expanded: pd.DataFrame) -> pd.DataFrame:
     return df
 
 
-def add_next_pick_number(df_expanded: pd.DataFrame) -> pd.DataFrame:
+def add_next_pick_number(
+    df_expanded: pd.DataFrame, out_col: str='next_pick_number', filter_nulls: bool=True
+) -> pd.DataFrame:
     """ 
     Adds the pick number of the next time the user will draft.
     Used to determine if the player was available in the next round.
@@ -429,19 +431,20 @@ def add_next_pick_number(df_expanded: pd.DataFrame) -> pd.DataFrame:
     df['number_rl2'] = df['number'].shift(-2)
 
     # Accounts for picks at the turn.
-    df['next_pick_number'] = np.where(df['number_rl1'] - df['number'] == 1
+    df[out_col] = np.where(df['number_rl1'] - df['number'] == 1
                                     , df['number_rl2']
                                     , df['number_rl1'])
 
     # Fills picks pulled from other users/drafts with null values.
-    df['next_pick_number'] = np.where(df['next_pick_number'] - df['number'] < 0
+    df[out_col] = np.where(df[out_col] - df['number'] < 0
                                     , np.nan
-                                    , df['next_pick_number'])
+                                    , df[out_col])
 
-    df = pd.merge(df_expanded, df[['draft_id', 'number', 'next_pick_number']]
+    df = pd.merge(df_expanded, df[['draft_id', 'number', out_col]]
                     , on=['draft_id', 'number'], how='left')
 
-    df = df.loc[df['next_pick_number'].notna()]
+    if filter_nulls:
+        df = df.loc[df[out_col].notna()]
 
     return df
 

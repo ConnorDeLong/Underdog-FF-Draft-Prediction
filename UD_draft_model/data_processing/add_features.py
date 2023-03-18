@@ -19,7 +19,7 @@ def add_current_rank(df: pd.DataFrame) -> pd.DataFrame:
 def add_features(df: pd.DataFrame) -> pd.DataFrame:
     """
     Adds a handful of basic features that capture each players ranking
-    relative to the nex pick.
+    relative to the next pick.
     """
 
     df = add_current_rank(df)
