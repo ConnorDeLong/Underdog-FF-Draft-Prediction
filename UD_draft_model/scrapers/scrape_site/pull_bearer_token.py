@@ -9,6 +9,8 @@ from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 
+import UD_draft_model.scrapers.scrape_site.scrape_league_data as scrape_site
+
 
 def create_webdriver(url, chromedriver_path, username, password):
 
@@ -80,7 +82,7 @@ def create_token_path() -> str:
     return token_path
 
 
-def read_bearer_token(file_path: str = None) -> dict:
+def read_bearer_tokens(file_path: str = None) -> dict:
     """
     Reads in all user's bearer tokens.
     """
@@ -103,7 +105,7 @@ def save_bearer_token(username: str, bearer_token: str) -> None:
     token_path = create_token_path()
 
     try:
-        token_data = read_bearer_token(file_path=token_path)
+        token_data = read_bearer_tokens(file_path=token_path)
     except FileNotFoundError:
         token_data = {}
 
@@ -114,6 +116,25 @@ def save_bearer_token(username: str, bearer_token: str) -> None:
         json.dump(token_data, f)
 
     return None
+
+
+def test_bearer_token(bearer_token: str) -> bool:
+    """
+    Returns a True value if the bearer_token.
+    """
+
+    url = "https://api.underdogfantasy.com/v1/user"
+    base_data = scrape_site.BaseData()
+    base_data.auth_header["authorization"] = bearer_token
+
+    data = base_data.read_in_site_data(url, headers=base_data.auth_header)
+
+    if "error" in (list(data.keys())):
+        token_valid = False
+    else:
+        token_valid = True
+
+    return token_valid
 
 
 if __name__ == "__main__":

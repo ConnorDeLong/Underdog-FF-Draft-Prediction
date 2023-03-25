@@ -4,7 +4,7 @@ import time
 
 
 class BaseData:
-    def __init__(self, clear_json_attrs: bool=True):
+    def __init__(self, clear_json_attrs: bool = True):
         self._clear_json_attrs = clear_json_attrs
 
         # user-agent and/or accept headers sometimes required
@@ -18,7 +18,7 @@ class BaseData:
         self._player_scores_wk_1_id = 78
         self._player_scores_wk_last_id = 78 + 17
 
-    def build_all_dfs(self, sleep_time: int=0):
+    def build_all_dfs(self, sleep_time: int = 0):
         """
         Overwrites every 'df_' attribute with a df that is created by running the
         'create_' method that matches it. This serves as the primary method
@@ -52,7 +52,7 @@ class BaseData:
         for attr in attrs:
             self.__dict__[attr] = {}
 
-    def read_in_site_data(self, url, headers: dict=None) -> dict:
+    def read_in_site_data(self, url, headers: dict = None) -> dict:
         """Pulls in the raw data from the API and returns it as a dict"""
 
         if headers is None:
@@ -83,7 +83,7 @@ class BaseData:
                 try:
                     data_element = data[output_data_col]
                 except:
-                    # Note: This should probably be conditional on the data type, 
+                    # Note: This should probably be conditional on the data type,
                     # but just using N/A for now.
                     data_element = "N/A"
 
@@ -141,7 +141,7 @@ class DraftsDetail(BaseData):
     ):
         super().__init__(clear_json_attrs=clear_json_attrs)
 
-        self.auth_header['authorization'] = bearer_token
+        self.auth_header["authorization"] = bearer_token
 
         self.league_ids = league_ids
 
@@ -213,22 +213,22 @@ class DraftsDetail(BaseData):
         return initial_scraped_df
 
     def _create_df_draft_entries_ind_league(self, league_id: str) -> pd.DataFrame:
-        """ 
+        """
         Creates a df of all users in the draft, sorted by pick order.
         """
 
         json = self.read_in_site_data(self.url_drafts[league_id], self.auth_header)
 
-        df_entries = self.create_scraped_data_df(json['draft']['draft_entries'])
-        df_users = self.create_scraped_data_df(json['draft']['users'])
+        df_entries = self.create_scraped_data_df(json["draft"]["draft_entries"])
+        df_users = self.create_scraped_data_df(json["draft"]["users"])
 
-        df_users.rename(columns={'id': 'user_id'}, inplace=True)
-        df_users = df_users[['user_id', 'username']]
+        df_users.rename(columns={"id": "user_id"}, inplace=True)
+        df_users = df_users[["user_id", "username"]]
 
-        df = pd.merge(df_entries, df_users, how='left', on='user_id')
-        df = df.sort_values(by='pick_order').reset_index(drop=True)
+        df = pd.merge(df_entries, df_users, how="left", on="user_id")
+        df = df.sort_values(by="pick_order").reset_index(drop=True)
 
-        df['draft_id'] = league_id
+        df["draft_id"] = league_id
 
         return df
 
@@ -280,30 +280,28 @@ class DraftsDetail(BaseData):
 
 class DraftsActive(BaseData):
 
-    url = 'https://api.underdogfantasy.com/v3/user/active_drafts'
+    url = "https://api.underdogfantasy.com/v3/user/active_drafts"
 
-    def __init__(self, bearer_token: str, clear_json_attrs: bool=True):
+    def __init__(self, bearer_token: str, clear_json_attrs: bool = True):
         super().__init__(clear_json_attrs=clear_json_attrs)
 
-        self.auth_header['authorization'] = bearer_token
+        self.auth_header["authorization"] = bearer_token
 
         self.json = {}
         self.df_active_drafts = None
 
     def create_df_active_drafts(self) -> pd.DataFrame:
-        """ 
-        Creates a draft level df of all active drafts. 
+        """
+        Creates a draft level df of all active drafts.
         """
 
-        self.json = self.read_in_site_data(
-            DraftsActive.url, headers=self.auth_header
-        )
+        self.json = self.read_in_site_data(DraftsActive.url, headers=self.auth_header)
 
         try:
             df = self.create_scraped_data_df(self.json["drafts"])
             df = self._add_contest_refs(df)
         except IndexError:
-            print(f'No data found in {DraftsActive.url} - no df will be returned')
+            print(f"No data found in {DraftsActive.url} - no df will be returned")
             df = None
 
         if self.clear_json_attrs:
@@ -312,17 +310,17 @@ class DraftsActive(BaseData):
         return df
 
     def _add_contest_refs(self, df: pd.DataFrame) -> pd.DataFrame:
-        """ 
+        """
         Scoring type required to get the rankings (appearances) used
         for the draft and rounds needed to build a draft shell.
         """
 
         contest_refs = ContestRefs()
         df_styles = contest_refs.create_df_contest_styles()
-        df_styles = df_styles[['id', 'scoring_type_id', 'rounds']]
-        df_styles.rename(columns={'id': 'contest_style_id'}, inplace=True)
+        df_styles = df_styles[["id", "scoring_type_id", "rounds"]]
+        df_styles.rename(columns={"id": "contest_style_id"}, inplace=True)
 
-        df = pd.merge(df, df_styles, how='left', on='contest_style_id')
+        df = pd.merge(df, df_styles, how="left", on="contest_style_id")
 
         return df
 
@@ -331,13 +329,8 @@ class Drafts(BaseData):
     """
     Compiles all completed or settled draft level data for a slate.
     """
-    
-    def __init__(
-        self, 
-        bearer_token: str,
-        slate,
-        clear_json_attrs: bool=True
-    ):
+
+    def __init__(self, bearer_token: str, slate, clear_json_attrs: bool = True):
         """
         Note: This requires the user-agent header - Should be able to grab this
         with the bearer token, but hard coding for now
@@ -345,10 +338,10 @@ class Drafts(BaseData):
 
         super().__init__(clear_json_attrs=clear_json_attrs)
 
-        self.auth_header['authorization'] = bearer_token
+        self.auth_header["authorization"] = bearer_token
         self.slate = slate
 
-        url_suffix = f'/{self.slate.slate_type}_drafts'
+        url_suffix = f"/{self.slate.slate_type}_drafts"
         self.url_base_leagues = (
             "https://api.underdogfantasy.com/v2/user/slates/"
             + self.slate.id
@@ -363,7 +356,7 @@ class Drafts(BaseData):
         self.json_leagues = {}
         self.df_all_leagues = pd.DataFrame()
 
-    def create_df_all_leagues(self, league_urls: list=None) -> pd.DataFrame:
+    def create_df_all_leagues(self, league_urls: list = None) -> pd.DataFrame:
         if league_urls is None:
             league_urls = self.get_league_urls()
 
@@ -379,7 +372,7 @@ class Drafts(BaseData):
         return df_all_leagues
 
     def get_league_urls(self) -> list:
-        """ 
+        """
         Creates a list of all urls which store draft level data for the slate.
         """
 
@@ -395,7 +388,7 @@ class Drafts(BaseData):
 
         urls = base_league_url + tourney_league_urls
 
-        return urls        
+        return urls
 
     def _create_df_leagues(self, url_base: str, json_leagues_key: str) -> pd.DataFrame:
         self.json_leagues[json_leagues_key] = self._create_json_leagues(url_base)
@@ -465,7 +458,7 @@ class Drafts(BaseData):
         """
         Creates a list of all the URLs that contain entries
         """
-        
+
         tourney_league_ids = list(self._create_df_tourney_league_ids()["id"])
 
         base_url = "https://api.underdogfantasy.com/v1/user/tournament_rounds/"
@@ -479,25 +472,18 @@ class Drafts(BaseData):
 
 
 class Slates(BaseData):
-    """ 
-    Compiles all available and completed slates for a specific slate type. 
+    """
+    Compiles all available and completed slates for a specific slate type.
     """
 
-    url_slates_available = (
-        'https://stats.underdogfantasy.com/v1/sports/nfl/slates'
-    )
-    url_slates_completed = (
-        'https://api.underdogfantasy.com/v2/user/completed_slates'
-    )
+    url_slates_available = "https://stats.underdogfantasy.com/v1/sports/nfl/slates"
+    url_slates_completed = "https://api.underdogfantasy.com/v2/user/completed_slates"
     url_slates_settled = (
-        'https://api.underdogfantasy.com/v1/user/sports/nfl/settled_slates'
+        "https://api.underdogfantasy.com/v1/user/sports/nfl/settled_slates"
     )
 
     def __init__(
-        self,
-        bearer_token: str,
-        slate_type: str,
-        clear_json_attrs: bool = True
+        self, bearer_token: str, slate_type: str, clear_json_attrs: bool = True
     ):
         """
         slate_type must be 'available', 'completed', or 'settled'
@@ -505,7 +491,7 @@ class Slates(BaseData):
 
         super().__init__(clear_json_attrs=clear_json_attrs, slate_id=None)
 
-        self.auth_header['authorization'] = bearer_token
+        self.auth_header["authorization"] = bearer_token
         self.slate_type = slate_type
 
         self.df_slates = None
@@ -513,17 +499,18 @@ class Slates(BaseData):
 
         self.json = {}
 
-    def create_df_slates(self, headers: dict=None, clear_json: bool=False
+    def create_df_slates(
+        self, headers: dict = None, clear_json: bool = False
     ) -> pd.DataFrame:
-        """ 
+        """
         Creates df of all the slates found.
         """
 
         if headers is None:
-            headers=self.auth_header
+            headers = self.auth_header
 
         url = self._get_url()
-        
+
         self.json = self.read_in_site_data(url, headers=self.auth_header)
 
         try:
@@ -531,11 +518,9 @@ class Slates(BaseData):
 
             # This is stored as a list, but seems to always only contain
             # one id.
-            df['contest_style_ids'] = (
-                df['contest_style_ids'].apply(lambda x: x[0])
-            )
+            df["contest_style_ids"] = df["contest_style_ids"].apply(lambda x: x[0])
         except IndexError:
-            print(f'No data found in {url} - no df will be returned')
+            print(f"No data found in {url} - no df will be returned")
             df = None
 
         self.slates = self._create_slates(df)
@@ -543,24 +528,24 @@ class Slates(BaseData):
         if clear_json:
             self.json = {}
 
-        return df   
+        return df
 
     def _get_url(self) -> str:
         """
         Selects the url to be used based on the slate_type.
         """
 
-        if self.slate_type == 'available':
+        if self.slate_type == "available":
             url = Slates.url_slates_available
-        elif self.slate_type == 'completed':
+        elif self.slate_type == "completed":
             url = Slates.url_slates_completed
-        elif self.slate_type == 'settled':
+        elif self.slate_type == "settled":
             url = Slates.url_slates_settled
 
         return url
 
     def _create_slates(self, df_slates: pd.DataFrame) -> list:
-        """ 
+        """
         Creates a list of Slate objects.
         """
 
@@ -574,17 +559,16 @@ class Slates(BaseData):
 
 
 class Slate:
-
     def __init__(self, df_slate: pd.Series, slate_type):
-        self.id = df_slate['id']
-        self.contest_style_ids = df_slate['contest_style_ids']
-        self.description = df_slate['description']
-        self.title = df_slate['title']
+        self.id = df_slate["id"]
+        self.contest_style_ids = df_slate["contest_style_ids"]
+        self.description = df_slate["description"]
+        self.title = df_slate["title"]
         self.slate_type = slate_type
 
         try:
-            self.draft_count = df_slate['draft_count']
-            self.tournament_draft_count = df_slate['tournament_draft_count']
+            self.draft_count = df_slate["draft_count"]
+            self.tournament_draft_count = df_slate["tournament_draft_count"]
         except:
             pass
 
@@ -596,7 +580,7 @@ class ReferenceData(BaseData):
         self,
         slate_id: str,
         scoring_type_id: str,
-        clear_json_attrs: bool=True, 
+        clear_json_attrs: bool = True,
     ):
         super().__init__(clear_json_attrs=clear_json_attrs)
 
@@ -608,24 +592,20 @@ class ReferenceData(BaseData):
         self._player_scores_wk_1_id = 1186
 
         self.url_players = (
-            'https://stats.underdogfantasy.com/v1/slates/'
-            + self.slate_id 
-            + '/players'
+            "https://stats.underdogfantasy.com/v1/slates/" + self.slate_id + "/players"
         )
         self.url_appearances = (
-            'https://stats.underdogfantasy.com/v1/slates/'
+            "https://stats.underdogfantasy.com/v1/slates/"
             + self.slate_id
-            + '/scoring_types/'
+            + "/scoring_types/"
             + self.scoring_type_id
-            + '/appearances'
+            + "/appearances"
         )
-        self.url_teams = 'https://stats.underdogfantasy.com/v1/teams'
+        self.url_teams = "https://stats.underdogfantasy.com/v1/teams"
 
-        base_url_player_scores = 'https://stats.underdogfantasy.com/v1/weeks/'
+        base_url_player_scores = "https://stats.underdogfantasy.com/v1/weeks/"
         end_url_player_scores = (
-            '/scoring_types/'
-            + self.scoring_type_id
-            + '/appearances'
+            "/scoring_types/" + self.scoring_type_id + "/appearances"
         )
         self.urls_player_scores = {
             "player_scores_wk_"
@@ -846,16 +826,16 @@ class ReferenceData(BaseData):
 
 
 class ContestRefs(BaseData):
-    """ 
+    """
     Compiles all major contest related data into dataframes.
     Note that this includes contests specific to a user (e.g. completed
     slates, settled slates, etc.)
     """
 
-    url_scoring_types = 'https://stats.underdogfantasy.com/v1/scoring_types'
-    url_contest_styles = 'https://stats.underdogfantasy.com/v1/contest_styles'
+    url_scoring_types = "https://stats.underdogfantasy.com/v1/scoring_types"
+    url_contest_styles = "https://stats.underdogfantasy.com/v1/contest_styles"
 
-    def __init__(self, clear_json_attrs: bool=True):
+    def __init__(self, clear_json_attrs: bool = True):
         super().__init__(clear_json_attrs=clear_json_attrs)
 
         self.df_scoring_types = None
@@ -863,8 +843,8 @@ class ContestRefs(BaseData):
 
         self.json = {}
 
-    def create_df_scoring_types(self, headers: dict=None, clear_json: bool=False,
-        update_attr: bool=False
+    def create_df_scoring_types(
+        self, headers: dict = None, clear_json: bool = False, update_attr: bool = False
     ) -> pd.DataFrame:
         """
         Creates a scoring type level df with the scoring types of all existing
@@ -879,43 +859,44 @@ class ContestRefs(BaseData):
         """
 
         if headers is None:
-            headers=self.auth_header
-        
-        self.json['scoring_types'] = self.read_in_site_data(
+            headers = self.auth_header
+
+        self.json["scoring_types"] = self.read_in_site_data(
             ContestRefs.url_scoring_types, headers=self.auth_header
         )
 
-        df = self.create_scraped_data_df(self.json['scoring_types']["scoring_types"])
+        df = self.create_scraped_data_df(self.json["scoring_types"]["scoring_types"])
 
-        df = df.loc[df['sport_id'] == 'NFL']
+        df = df.loc[df["sport_id"] == "NFL"]
 
         if update_attr:
             self.df_scoring_types = df
 
         if clear_json:
-            del self.json['scoring_types']
+            del self.json["scoring_types"]
 
         return df
 
-    def create_df_contest_styles(self, headers: dict=None, clear_json: bool=False,
-    update_attr: bool=False) -> pd.DataFrame:
+    def create_df_contest_styles(
+        self, headers: dict = None, clear_json: bool = False, update_attr: bool = False
+    ) -> pd.DataFrame:
 
         if headers is None:
-            headers=self.auth_header
-        
-        self.json['contest_styles'] = self.read_in_site_data(
+            headers = self.auth_header
+
+        self.json["contest_styles"] = self.read_in_site_data(
             ContestRefs.url_contest_styles, headers=self.auth_header
         )
 
-        df = self.create_scraped_data_df(self.json['contest_styles']["contest_styles"])
+        df = self.create_scraped_data_df(self.json["contest_styles"]["contest_styles"])
 
-        df = df.loc[df['sport_id'] == 'NFL']
+        df = df.loc[df["sport_id"] == "NFL"]
 
         if update_attr:
             self.df_contest_styles = df
 
         if clear_json:
-            del self.json['contest_styles'] 
+            del self.json["contest_styles"]
 
         return df
 
@@ -923,7 +904,7 @@ class ContestRefs(BaseData):
 def create_underdog_df_dict(bearer_token: str, sleep_time: int = 0) -> dict:
     """
     Creates a dictionary of dfs containing the most relevant UD data
-    
+
     TODO: Update to align with the refactored code.
     """
 
@@ -975,6 +956,8 @@ if __name__ == "__main__":
     ##############################################################
 
     import getpass
+
+    import UD_draft_model.scrapers.scrape_site.pull_bearer_token as pb
     from UD_draft_model.scrapers.scrape_site.pull_bearer_token import pull_bearer_token
 
     pd.set_option("display.max_rows", 50)
@@ -982,14 +965,17 @@ if __name__ == "__main__":
 
     ### Variables to change ###
     chromedriver_path = "/usr/bin/chromedriver"
-    username = input("Enter Underdog username: ")
-    password = getpass.getpass()
+    # username = input("Enter Underdog username: ")
+    # password = getpass.getpass()
 
     ### Keep as is ###
-    url = "https://underdogfantasy.com/lobby"
-    bearer_token = pull_bearer_token(url, chromedriver_path, username, password)
+    # url = "https://underdogfantasy.com/lobby"
+    # bearer_token = pull_bearer_token(url, chromedriver_path, username, password)
+
+    username = "condelong11@yahoo.com"
+    bearer_token = pb.read_bearer_tokens()[username]
 
     print(bearer_token)
 
     ### Pull all major UD data elements ###
-    underdog_data = create_underdog_df_dict(bearer_token, sleep_time=5)
+    # underdog_data = create_underdog_df_dict(bearer_token, sleep_time=5)
