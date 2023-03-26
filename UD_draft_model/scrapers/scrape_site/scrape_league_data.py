@@ -4,16 +4,34 @@ import time
 
 
 class BaseData:
-    def __init__(self, clear_json_attrs: bool = True):
+    def __init__(self, headers: dict, clear_json_attrs: bool = True):
+        """
+        Provides basic functionality to scrape the UD API and store the
+        data into dfs.
+
+        Parameters
+        ----------
+        headers : dict
+            Headers to be passed to the API request.
+            This MUST include a 'user-agent' key which can be scraped from
+            the pull_bearer_token module. 'authorization' header (i.e. the
+            bearer token) is not always required.
+        clear_json_attrs : bool, optional
+            Clears the json attrs created from scraping the API, by default True.
+        """
+
         self._clear_json_attrs = clear_json_attrs
 
+        self.auth_header = headers
+        self.auth_header["accept"] = "application/json"
+
         # user-agent and/or accept headers sometimes required
-        self.auth_header = {
-            "accept": "application/json",
-            "user-agent": "Mozilla/5.0 (X11; Linux x86_64) \
-                                AppleWebKit/537.36 (KHTML, like Gecko) \
-                                Chrome/99.0.4844.51 Safari/537.36",
-        }
+        # self.auth_header = {
+        #     "accept": "application/json",
+        #     "user-agent": "Mozilla/5.0 (X11; Linux x86_64) \
+        #                         AppleWebKit/537.36 (KHTML, like Gecko) \
+        #                         Chrome/99.0.4844.51 Safari/537.36",
+        # }
 
         self._player_scores_wk_1_id = 78
         self._player_scores_wk_last_id = 78 + 17

@@ -4,6 +4,7 @@ Module is responsible for pulling a bearer token that can be used to scrape the 
 import time
 import os
 import json
+from requests import JSONDecodeError
 
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
@@ -35,12 +36,20 @@ def create_webdriver(url, chromedriver_path, username, password):
     return driver
 
 
-def pull_bearer_token(url, chromedriver_path, username, password):
+def pull_logs(url, chromedriver_path, username, password):
 
     driver = create_webdriver(url, chromedriver_path, username, password)
 
-    time.sleep(20)
+    time.sleep(5)
     logs = driver.get_log("performance")
+
+    driver.close()
+    driver.quit()
+
+    return logs
+
+
+def pull_bearer_token(logs):
 
     for log in logs:
         try:
@@ -55,13 +64,35 @@ def pull_bearer_token(url, chromedriver_path, username, password):
         except:
             pass
 
-    driver.close()
-    driver.quit()
-
     return bearer_token
 
 
-def create_token_path() -> str:
+def pull_user_agent(logs):
+
+    for log in logs:
+        try:
+            log_dict = json.loads(log["message"])
+            val = log_dict["message"]["params"]["request"]["headers"]["User-Agent"]
+            break
+        except:
+            pass
+
+    return val
+
+
+def pull_required_headers(url, chromedriver_path, username, password):
+
+    logs = pull_logs(url, chromedriver_path, username, password)
+
+    bearer_token = pull_bearer_token(logs)
+    user_agent = pull_user_agent(logs)
+
+    headers = {"authorization": bearer_token, "user-agent": user_agent}
+
+    return headers
+
+
+def create_headers_path() -> str:
     """
     Creates the path to the bearer_token data.
     """
@@ -82,13 +113,13 @@ def create_token_path() -> str:
     return token_path
 
 
-def read_bearer_tokens(file_path: str = None) -> dict:
+def read_headers(file_path: str = None) -> dict:
     """
     Reads in all user's bearer tokens.
     """
 
     if file_path is None:
-        file_path = create_token_path()
+        file_path = create_headers_path()
 
     with open(file_path, "r") as f:
         json_data = json.load(f)
@@ -96,39 +127,45 @@ def read_bearer_tokens(file_path: str = None) -> dict:
     return json_data
 
 
-def save_bearer_token(username: str, bearer_token: str) -> None:
+def save_headers(username: str, headers: dict) -> None:
     """
     Saves the bearer token to a json file to prevent re-scraping the token
     when it's still active.
     """
 
-    token_path = create_token_path()
+    token_path = create_headers_path()
 
     try:
-        token_data = read_bearer_tokens(file_path=token_path)
+        header_data = read_headers(file_path=token_path)
     except FileNotFoundError:
-        token_data = {}
+        header_data = {}
 
-    token_data[username] = bearer_token
-    print(token_data)
+    header_data[username] = headers
 
     with open(token_path, "w") as f:
-        json.dump(token_data, f)
+        json.dump(header_data, f)
 
     return None
 
 
-def test_bearer_token(bearer_token: str) -> bool:
+def test_headers(headers: dict) -> bool:
     """
     Returns a True value if the bearer_token.
     """
 
     url = "https://api.underdogfantasy.com/v1/user"
-    base_data = scrape_site.BaseData()
-    base_data.auth_header["authorization"] = bearer_token
+    base_data = scrape_site.BaseData(headers)
+    # base_data.auth_header["authorization"] = bearer_token
 
-    data = base_data.read_in_site_data(url, headers=base_data.auth_header)
+    # JSONDecodeError thrown when the user-agent is incorrect.
+    try:
+        data = base_data.read_in_site_data(url, headers=base_data.auth_header)
+    except JSONDecodeError:
+        token_valid = False
 
+        return token_valid
+
+    # Returns an error in the reponse if the bearer token has expired.
     if "error" in (list(data.keys())):
         token_valid = False
     else:
