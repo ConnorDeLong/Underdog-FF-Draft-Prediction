@@ -22,7 +22,7 @@ class BaseData:
 
         self._clear_json_attrs = clear_json_attrs
 
-        self.auth_header = headers
+        self.auth_header = headers.copy()
         self.auth_header["accept"] = "application/json"
 
         # user-agent and/or accept headers sometimes required
@@ -154,12 +154,8 @@ class BaseData:
 class DraftsDetail(BaseData):
     """Compiles all major league specific data into dataframes"""
 
-    def __init__(
-        self, league_ids: list, bearer_token: str, clear_json_attrs: bool = True
-    ):
-        super().__init__(clear_json_attrs=clear_json_attrs)
-
-        self.auth_header["authorization"] = bearer_token
+    def __init__(self, league_ids: list, headers: str, clear_json_attrs: bool = True):
+        super().__init__(headers, clear_json_attrs=clear_json_attrs)
 
         self.league_ids = league_ids
 
@@ -300,10 +296,8 @@ class DraftsActive(BaseData):
 
     url = "https://api.underdogfantasy.com/v3/user/active_drafts"
 
-    def __init__(self, bearer_token: str, clear_json_attrs: bool = True):
-        super().__init__(clear_json_attrs=clear_json_attrs)
-
-        self.auth_header["authorization"] = bearer_token
+    def __init__(self, headers: str, clear_json_attrs: bool = True):
+        super().__init__(headers, clear_json_attrs=clear_json_attrs)
 
         self.json = {}
         self.df_active_drafts = None
@@ -333,7 +327,7 @@ class DraftsActive(BaseData):
         for the draft and rounds needed to build a draft shell.
         """
 
-        contest_refs = ContestRefs()
+        contest_refs = ContestRefs(self.auth_header)
         df_styles = contest_refs.create_df_contest_styles()
         df_styles = df_styles[["id", "scoring_type_id", "rounds"]]
         df_styles.rename(columns={"id": "contest_style_id"}, inplace=True)
@@ -348,15 +342,14 @@ class Drafts(BaseData):
     Compiles all completed or settled draft level data for a slate.
     """
 
-    def __init__(self, bearer_token: str, slate, clear_json_attrs: bool = True):
+    def __init__(self, headers: str, slate, clear_json_attrs: bool = True):
         """
         Note: This requires the user-agent header - Should be able to grab this
         with the bearer token, but hard coding for now
         """
 
-        super().__init__(clear_json_attrs=clear_json_attrs)
+        super().__init__(headers, clear_json_attrs=clear_json_attrs)
 
-        self.auth_header["authorization"] = bearer_token
         self.slate = slate
 
         url_suffix = f"/{self.slate.slate_type}_drafts"
@@ -500,16 +493,13 @@ class Slates(BaseData):
         "https://api.underdogfantasy.com/v1/user/sports/nfl/settled_slates"
     )
 
-    def __init__(
-        self, bearer_token: str, slate_type: str, clear_json_attrs: bool = True
-    ):
+    def __init__(self, headers: str, slate_type: str, clear_json_attrs: bool = True):
         """
         slate_type must be 'available', 'completed', or 'settled'
         """
 
-        super().__init__(clear_json_attrs=clear_json_attrs, slate_id=None)
+        super().__init__(headers, clear_json_attrs=clear_json_attrs)
 
-        self.auth_header["authorization"] = bearer_token
         self.slate_type = slate_type
 
         self.df_slates = None
@@ -596,11 +586,12 @@ class ReferenceData(BaseData):
 
     def __init__(
         self,
+        headers: str,
         slate_id: str,
         scoring_type_id: str,
         clear_json_attrs: bool = True,
     ):
-        super().__init__(clear_json_attrs=clear_json_attrs)
+        super().__init__(headers, clear_json_attrs=clear_json_attrs)
 
         self.slate_id = slate_id
         self.scoring_type_id = scoring_type_id
@@ -853,8 +844,8 @@ class ContestRefs(BaseData):
     url_scoring_types = "https://stats.underdogfantasy.com/v1/scoring_types"
     url_contest_styles = "https://stats.underdogfantasy.com/v1/contest_styles"
 
-    def __init__(self, clear_json_attrs: bool = True):
-        super().__init__(clear_json_attrs=clear_json_attrs)
+    def __init__(self, headers: str, clear_json_attrs: bool = True):
+        super().__init__(headers, clear_json_attrs=clear_json_attrs)
 
         self.df_scoring_types = None
         self.df_contest_styles = None
@@ -976,24 +967,44 @@ if __name__ == "__main__":
     import getpass
 
     import UD_draft_model.scrapers.scrape_site.pull_bearer_token as pb
-    from UD_draft_model.scrapers.scrape_site.pull_bearer_token import pull_bearer_token
 
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.max_columns", 50)
 
     ### Variables to change ###
     chromedriver_path = "/usr/bin/chromedriver"
-    # username = input("Enter Underdog username: ")
+    username = input("Enter Underdog username: ")
     # password = getpass.getpass()
 
     ### Keep as is ###
     # url = "https://underdogfantasy.com/lobby"
     # bearer_token = pull_bearer_token(url, chromedriver_path, username, password)
 
-    username = "condelong11@yahoo.com"
-    bearer_token = pb.read_bearer_tokens()[username]
+    headers = pb.read_headers()[username]
+    valid_token = pb.test_headers(headers)
 
-    print(bearer_token)
+    if valid_token == False:
+        password = getpass.getpass()
+        url = "https://underdogfantasy.com/lobby"
+        bearer_token = pb.pull_bearer_token(url, chromedriver_path, username, password)
+
+        pb.save_bearer_token(username, bearer_token)
 
     ### Pull all major UD data elements ###
+    draft_id = "2d30ccdc-4b4a-4d19-9532-d13b1cc33a3b"
+    draft_detail = DraftsDetail([draft_id], headers)
+    drafts_active = DraftsActive(headers)
+    slates = Slates(headers, "completed")
+    df_slates = slates.create_df_slates()
+    slate = slates.slates[0]
+    drafts = Drafts(headers, slate)
+    # refs = ReferenceData(headers, slate.id, )
+
+    df_a = draft_detail.create_df_drafts()
+    df_b = drafts_active.create_df_active_drafts()
+
+    # print(df_a)
+    print(type(slate.id))
+    # print(drafts_active.auth_header)
+
     # underdog_data = create_underdog_df_dict(bearer_token, sleep_time=5)

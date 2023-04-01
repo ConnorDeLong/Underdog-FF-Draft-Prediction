@@ -36,7 +36,7 @@ def create_webdriver(url, chromedriver_path, username, password):
     return driver
 
 
-def pull_logs(url, chromedriver_path, username, password):
+def pull_logs(url: str, chromedriver_path: str, username: str, password: str) -> dict:
 
     driver = create_webdriver(url, chromedriver_path, username, password)
 
@@ -49,7 +49,7 @@ def pull_logs(url, chromedriver_path, username, password):
     return logs
 
 
-def pull_bearer_token(logs):
+def pull_bearer_token(logs: dict) -> str:
 
     for log in logs:
         try:
@@ -67,7 +67,7 @@ def pull_bearer_token(logs):
     return bearer_token
 
 
-def pull_user_agent(logs):
+def pull_user_agent(logs: dict) -> str:
 
     for log in logs:
         try:
@@ -80,7 +80,9 @@ def pull_user_agent(logs):
     return val
 
 
-def pull_required_headers(url, chromedriver_path, username, password):
+def pull_required_headers(
+    url: str, chromedriver_path: str, username: str, password: str
+) -> dict:
 
     logs = pull_logs(url, chromedriver_path, username, password)
 
@@ -150,7 +152,7 @@ def save_headers(username: str, headers: dict) -> None:
 
 def test_headers(headers: dict) -> bool:
     """
-    Returns a True value if the bearer_token.
+    Returns a True value if the headers are still valid.
     """
 
     url = "https://api.underdogfantasy.com/v1/user"
