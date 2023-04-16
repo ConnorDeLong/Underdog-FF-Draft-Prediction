@@ -3,6 +3,7 @@ import pickle
 
 import pandas as pd
 import numpy as np
+import streamlit as st
 import getpass
 
 import UD_draft_model.scrapers.scrape_site.scrape_league_data as scrape_site
@@ -12,7 +13,7 @@ import UD_draft_model.data_processing.add_features as add_features
 from UD_draft_model.modeling.model_version import ModelVersion
 
 
-def create_draft_board(df_entries: pd.DataFrame, num_rounds: int) -> pd.DataFrame:
+def create_draft_board(df_entries: pd.DataFrame, params: dict) -> pd.DataFrame:
     """
     Creates a df of all user/pick numbers given the entries of a snake draft.
 
@@ -34,7 +35,7 @@ def create_draft_board(df_entries: pd.DataFrame, num_rounds: int) -> pd.DataFram
     df_desc = df_entries.sort_values(by="pick_order", ascending=False)
 
     dfs = []
-    for round in range(1, num_rounds + 1):
+    for round in range(1, params["rounds"] + 1):
         if round % 2 == 0:
             df_round = df_desc.copy()
         else:
@@ -52,29 +53,8 @@ def create_draft_board(df_entries: pd.DataFrame, num_rounds: int) -> pd.DataFram
 
     df = df[keep_vars]
 
-    return df
-
-
-def update_board(df_board: pd.DataFrame, df_draft: pd.DataFrame) -> pd.DataFrame:
-    """
-    Updates the draft board with the selections made.
-
-    Parameters
-    ----------
-    df_board : pd.DataFrame
-        Draft board containing each pick number for every entry.
-    df_draft : pd.DataFrame
-        All draft selections that have been made so far.
-
-    Returns
-    -------
-    pd.DataFrame
-        Draft board that contains the player selection made at each pick.
-    """
-
-    df = pd.merge(
-        df_board, df_draft, how="left", on=["draft_id", "draft_entry_id", "number"]
-    )
+    df = prepare_drafts.add_next_pick_number(df, filter_nulls=False)
+    df = add_user_next_pick_number(df, params["draft_entry_id"])
 
     return df
 
@@ -140,6 +120,30 @@ def add_user_next_pick_number(
     )
 
     df.drop(columns=list(rename_vars.values()), inplace=True)
+
+    return df
+
+
+def update_board(df_board: pd.DataFrame, df_draft: pd.DataFrame) -> pd.DataFrame:
+    """
+    Updates the draft board with the selections made.
+
+    Parameters
+    ----------
+    df_board : pd.DataFrame
+        Draft board containing each pick number for every entry.
+    df_draft : pd.DataFrame
+        All draft selections that have been made so far.
+
+    Returns
+    -------
+    pd.DataFrame
+        Draft board that contains the player selection made at each pick.
+    """
+
+    df = pd.merge(
+        df_board, df_draft, how="left", on=["draft_id", "draft_entry_id", "number"]
+    )
 
     return df
 
@@ -226,6 +230,7 @@ def add_avail_players(
     return df
 
 
+@st.cache_resource
 def load_model(file_path: str) -> ModelVersion:
     """
     Loads the ModelVersion object containing the model to be used for creating
@@ -244,6 +249,8 @@ def load_model(file_path: str) -> ModelVersion:
     dbfile = open(file_path, "rb")
     obj = pickle.load(dbfile)
     dbfile.close()
+
+    print("model loaded")
 
     return obj
 
@@ -302,3 +309,44 @@ def merge_prediction(df: pd.DataFrame, pred: np.array, out_col: str) -> pd.DataF
     df[out_col] = df[out_col].astype(float).round(2)
 
     return df
+
+
+def final_players_df(
+    df_players: pd.DataFrame, df_draft: pd.DataFrame, df_cur_pick: pd.DataFrame, model
+) -> pd.DataFrame:
+    """
+    Selects the final columns to display
+
+    Parameters
+    ----------
+    df : pd.DataFrame
+        _description_
+
+    Returns
+    -------
+    pd.DataFrame
+        _description_
+    """
+
+    df_avail_players = get_avail_players(df_players, df_draft)
+    df_w_players = add_avail_players(df_cur_pick, df_avail_players)
+
+    df_w_features = add_features.add_features(df_w_players)
+
+    probs = create_predictions(df_w_features, model)
+    df_w_probs = merge_prediction(df_w_features, probs, "prob")
+
+    df_w_probs["full_name"] = df_w_probs["first_name"] + " " + df_w_probs["last_name"]
+
+    rename_cols = {
+        "full_name": "Player",
+        "position": "Position",
+        "abbr": "Team",
+        "adp": "ADP",
+        "prob": "Next Pick Selected Probability",
+    }
+
+    df_w_probs = df_w_probs[list(rename_cols.keys())]
+    df_w_probs = df_w_probs.rename(columns=rename_cols)
+
+    return df_w_probs
