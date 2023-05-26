@@ -7,6 +7,8 @@ import streamlit as st
 from selenium.common.exceptions import WebDriverException
 
 import UD_draft_model.app.prepare_data as prepare_data
+from UD_draft_model.app.draft import Draft
+from UD_draft_model.app.get_credentials import Credentials, get_headers
 import UD_draft_model.scrapers.scrape_site.scrape_league_data as scrape_site
 import UD_draft_model.scrapers.scrape_site.pull_bearer_token as pb
 import UD_draft_model.data_processing.prepare_drafts as prepare_drafts
@@ -14,7 +16,7 @@ import UD_draft_model.data_processing.add_features as add_features
 from UD_draft_model.modeling.model_version import ModelVersion
 
 # REMOVE LATER
-import UD_draft_model.credentials.credentials as credentials
+import UD_draft_model.credentials.credentials as _credentials
 
 CHROMEDRIVER_PATH = "/usr/bin/chromedriver"
 PATH = (
@@ -25,119 +27,19 @@ PATH = (
 MODEL_PATH = "../modeling/models"
 MODEL = "LogisticRegression_v01_v001"
 
-print(PATH)
-dbfile = open(join(PATH, "df_w_probs"), "rb")
-_df_w_probs = pickle.load(dbfile)
-dbfile.close()
 
-_df_w_probs["full_name"] = _df_w_probs["first_name"] + " " + _df_w_probs["last_name"]
+url = "https://underdogfantasy.com/lobby"
+chromedriver_path = "/usr/bin/chromedriver"
+username = _credentials.username
+password = _credentials.password
+headers = get_headers(username, password, chromedriver_path, save_headers=True)
+valid_credentials = True
 
-rename_cols = {
-    "full_name": "Player",
-    "position": "Position",
-    "abbr": "Team",
-    "adp": "ADP",
-    "prob": "Next Pick Selected Probability",
-}
+# credentials = Credentials(CHROMEDRIVER_PATH, session_state=st.session_state)
+# credentials.enter_ud_credentials()
 
-_df_w_probs = _df_w_probs[list(rename_cols.keys())]
-_df_w_probs = _df_w_probs.rename(columns=rename_cols)
-
-
-def get_headers(
-    username: str, password: str, chromedriver_path: str, save_headers: bool = False
-) -> dict:
-    """
-    Pulls the bearer token and user-agent required to make api requests.
-
-    Parameters
-    ----------
-    username : str
-        UD username/email.
-    password : str
-        UD password.
-    chromedriver_path : str
-        File path to chromedriver.
-    save_headers : bool, optional
-        Saves headers to UD_draft_model/scrapers/scrape_site/bearer_token.
-        Default is False
-
-    Returns
-    -------
-    dict
-        Required headers.
-    """
-
-    headers = pb.read_headers()
-
-    if username not in headers:
-        valid_token = False
-    else:
-        headers = headers[username]
-        valid_token = pb.test_headers(headers)
-
-    if valid_token == False:
-        url = "https://underdogfantasy.com/lobby"
-        headers = pb.pull_required_headers(url, chromedriver_path, username, password)
-
-        if save_headers:
-            pb.save_headers(username, headers)
-
-    return headers
-
-
-def enter_ud_credentials(chromdriver_path: str = CHROMEDRIVER_PATH) -> bool:
-    """
-    Creates a login form that requires the user to enter their UD
-    credentials in order to obtain the necessary API request headers.
-
-    Note that these headers are stored in session state.
-
-    Parameters
-    ----------
-    chromdriver_path : str, optional
-        File path to chromedriver.
-
-    Returns
-    -------
-    bool
-        Indicates if valid credentials were entered.
-    """
-
-    valid_credentials = False
-    placeholder = st.empty()
-
-    with placeholder.form("Enter"):
-        st.markdown("Underdog Credentials")
-
-        email = st.text_input("Email", placeholder="Enter Email")
-        password = st.text_input(
-            "Password", placeholder="Enter Password", type="password"
-        )
-
-        login_button = st.form_submit_button("Enter")
-
-        if login_button:
-            try:
-                headers = get_headers(email, password, chromdriver_path)
-                valid_credentials = True
-                st.session_state["headers"] = headers
-                placeholder.empty()
-            except KeyError:
-                pass
-            except UnboundLocalError:
-                st.write("Invalid Credentials - Please try again")
-            except WebDriverException:
-                st.write("Unable to check credentials")
-
-    return valid_credentials
-
-
-# if "valid_credentials" not in st.session_state:
-#     st.session_state["valid_credentials"] = False
-
-# if st.session_state["valid_credentials"] == False:
-#     st.session_state["valid_credentials"] = enter_ud_credentials()
+# headers = credentials.headers
+# valid_credentials = credentials.valid_credentials
 
 if "current_pick_number" not in st.session_state:
     st.session_state["current_pick_number"] = -1
@@ -145,17 +47,30 @@ if "current_pick_number" not in st.session_state:
 if "df_w_probs" not in st.session_state:
     st.session_state["df_w_probs"] = pd.DataFrame()
 
-# if st.session_state["valid_credentials"]:
-#     st.dataframe(df_w_probs)
 
-#     st.button("Re-run")
+@st.cache_resource
+def load_model(file_path: str) -> ModelVersion:
+    """
+    Loads the ModelVersion object containing the model to be used for creating
+    predictions.
 
-url = "https://underdogfantasy.com/lobby"
-chromedriver_path = "/usr/bin/chromedriver"
-username = credentials.username
-password = credentials.password
+    Parameters
+    ----------
+    file_path : str
+        Path to the ModelVersion object
 
-headers = get_headers(username, password, chromedriver_path, save_headers=True)
+    Returns
+    -------
+    ModelVersion
+        ModelVersion object with model to be used.
+    """
+    dbfile = open(file_path, "rb")
+    obj = pickle.load(dbfile)
+    dbfile.close()
+
+    print("model loaded")
+
+    return obj
 
 
 @st.cache_data
@@ -267,90 +182,80 @@ def clear_cache() -> None:
     st.cache_data.clear()
 
 
-model = prepare_data.load_model(join(MODEL_PATH, MODEL))
-
-df_active = get_active_drafts(headers)
-
-if df_active is None:
-    draft_ids = []
-else:
-    draft_ids = tuple(df_active["id"])
+model = load_model(join(MODEL_PATH, MODEL))
 
 
-draft_id = select_draft(draft_ids, headers)
+if valid_credentials:
+    df_active = get_active_drafts(headers)
 
-
-if df_active is not None:
-    params = get_draft_params(df_active, draft_id)
-
-    # params["draft_status"] = "drafting"
-    if params["draft_status"] == "drafting":
-        df_players = get_players(headers, params)
-        df_entries = get_draft_entries(headers, params)
-        df_board = prepare_data.create_draft_board(df_entries, params)
-
-        # IMPORTANT: this will result in an IndexError until the first pick
-        # has been selected
-        df_draft = get_draft(headers, params)
-        df_board = prepare_data.update_board(df_board, df_draft)
-        df_cur_pick = prepare_data.get_current_pick(df_board)
-
-        current_pick_number = df_cur_pick["number"].iloc[0]
-
-        if st.session_state["current_pick_number"] != current_pick_number:
-            st.session_state["current_pick_number"] = current_pick_number
-
-            # df_avail_players = prepare_data.get_avail_players(df_players, df_draft)
-            # df_w_players = prepare_data.add_avail_players(df_cur_pick, df_avail_players)
-
-            # df_w_features = add_features.add_features(df_w_players)
-
-            # probs = prepare_data.create_predictions(df_w_features, model)
-            # df_w_probs = prepare_data.merge_prediction(df_w_features, probs, "prob")
-
-            # df_w_probs["full_name"] = (
-            #     df_w_probs["first_name"] + " " + df_w_probs["last_name"]
-            # )
-
-            # rename_cols = {
-            #     "full_name": "Player",
-            #     "position": "Position",
-            #     "abbr": "Team",
-            #     "adp": "ADP",
-            #     "prob": "Next Pick Selected Probability",
-            # }
-
-            # df_w_probs = df_w_probs[list(rename_cols.keys())]
-            # df_w_probs = df_w_probs.rename(columns=rename_cols)
-
-            df_w_probs = prepare_data.final_players_df(
-                df_players.copy(), df_draft.copy(), df_cur_pick.copy(), model
-            )
-
-            st.session_state["df_w_probs"] = df_w_probs
-
-        if len(st.session_state["df_w_probs"]) > 0:
-            st.dataframe(st.session_state["df_w_probs"])
+    if df_active is None:
+        draft_ids = []
     else:
-        st.write("Draft has not been filled")
+        draft_ids = tuple(df_active["id"])
 
-# st.dataframe(df_w_probs)
+    draft_id = select_draft(draft_ids, headers)
 
+    if df_active is not None:
+        params = get_draft_params(df_active, draft_id)
 
-# print(st.session_state["valid_credentials"])
+        draft = Draft(params, headers, model)
+
+        # params["draft_status"] = "drafting"
+        if params["draft_status"] == "drafting":
+            draft.initialize_draft_attrs()
+            draft.update_draft_attrs()
+            draft.create_df_final_players()
+
+            if draft.df_final_players is not None:
+                st.dataframe(draft.df_final_players)
+        else:
+            st.write("Draft has not been filled")
 
 st.button("Re-run")
 
-# if "key" not in st.session_state:
-#     st.session_state["key"] = "value"
-#     print("check")
+"""
+if valid_credentials:
+    df_active = get_active_drafts(headers)
 
-# st.button("Re-run")
+    if df_active is None:
+        draft_ids = []
+    else:
+        draft_ids = tuple(df_active["id"])
 
+    draft_id = select_draft(draft_ids, headers)
 
-# st.dataframe(df_w_probs)
+    if df_active is not None:
+        params = get_draft_params(df_active, draft_id)
 
+        # params["draft_status"] = "drafting"
+        if params["draft_status"] == "drafting":
+            df_players = get_players(headers, params)
+            df_entries = get_draft_entries(headers, params)
+            df_board = prepare_data.create_draft_board(df_entries, params)
 
-# app(df_w_probs)
+            # IMPORTANT: this will result in an IndexError until the first pick
+            # has been selected
+            df_draft = get_draft(headers, params)
+            df_board = prepare_data.update_board(df_board, df_draft)
+            df_cur_pick = prepare_data.get_current_pick(df_board)
 
-# app2()
+            current_pick_number = df_cur_pick["number"].iloc[0]
+
+            if st.session_state["current_pick_number"] != current_pick_number:
+                st.session_state["current_pick_number"] = current_pick_number
+
+                df_w_probs = prepare_data.final_players_df(
+                    df_players.copy(), df_draft.copy(), df_cur_pick.copy(), model
+                )
+
+                st.session_state["df_w_probs"] = df_w_probs
+
+            if len(st.session_state["df_w_probs"]) > 0:
+                st.dataframe(st.session_state["df_w_probs"])
+        else:
+            st.write("Draft has not been filled")
+
+st.button("Re-run")
+
+print(df_draft)
+"""

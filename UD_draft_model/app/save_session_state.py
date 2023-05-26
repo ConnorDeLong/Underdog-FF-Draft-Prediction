@@ -56,7 +56,6 @@ class SaveSessionState:
         s_name = f"{class_name}_{name}"
         if super().__getattribute__("session_state") is not None:
             if s_name in super().__getattribute__("session_state"):
-                print(s_name)
                 return self.session_state[s_name]
             else:
                 return super().__getattribute__(name)
