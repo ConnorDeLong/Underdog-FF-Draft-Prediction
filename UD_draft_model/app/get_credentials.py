@@ -102,7 +102,6 @@ class Credentials(SaveSessionState):
                         st.write("Unable to check credentials")
 
 
-#### DELETE THESE ###
 def get_headers(
     username: str, password: str, chromedriver_path: str, save_headers: bool = False
 ) -> dict:

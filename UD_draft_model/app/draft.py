@@ -9,17 +9,181 @@ from UD_draft_model.modeling.model_version import ModelVersion
 import UD_draft_model.data_processing.add_features as add_features
 
 
+class TeamSummary(SaveSessionState):
+    def __init__(
+        self,
+        df_draft: pd.DataFrame,
+        df_players: pd.DataFrame,
+        draft_entry_id: str,
+        session_state=None,
+    ):
+        super().__init__(session_state=session_state)
+
+        self.initialize_session_state("df_draft", df_draft)
+        self.initialize_session_state("df_players", df_players)
+        self.initialize_session_state("draft_entry_id", draft_entry_id)
+        self.initialize_session_state("df_pos_bye_week", None)
+        self.initialize_session_state("df_team_pos", None)
+        self.initialize_session_state("df_pos", None)
+
+        self.df_draft = df_draft
+        self.df_players = df_players
+        self.draft_entry_id = draft_entry_id
+
+    def pos_bye_week_shell(self) -> pd.DataFrame:
+        """
+        Creates a position/bye week level dataframe of all possible position/bye week
+        combinations.
+        """
+
+        df = self.df_players[["position", "bye_week"]].dropna().drop_duplicates()
+
+        return df
+
+    def team_pos_shell(self) -> pd.DataFrame:
+        """
+        Creates a team/position level dataframe of all possible team/position
+        combinations.
+        """
+
+        df_team_pos = self.df_players[["position", "abbr"]].dropna().drop_duplicates()
+        df_team = df_team_pos[["abbr"]].drop_duplicates()
+        df_team["position"] = "All Positions"
+
+        df_team_pos = pd.concat([df_team_pos, df_team])
+
+        return df_team_pos
+
+    def pos_bye_week_agg(self) -> pd.DataFrame:
+        """
+        Creates a position/bye week level dataframe of all possible position/bye week
+        combinations and includes the number of players drafted for each combo.
+        """
+
+        df_entry_draft = self.df_draft.loc[
+            self.df_draft["draft_entry_id"] == self.draft_entry_id
+        ]
+
+        # df_draft doesn't contain any player attributes on it.
+        player_vars = ["appearance_id", "position", "bye_week", "abbr"]
+        df_entry_draft = pd.merge(
+            df_entry_draft, self.df_players[player_vars], how="left", on="appearance_id"
+        )
+
+        df_entry_agg = (
+            df_entry_draft.groupby(["position", "bye_week"])
+            .size()
+            .to_frame("num_players")
+            .reset_index()
+        )
+
+        # Need a position/bye_week shell to capture all possible combinations
+        df_pos_weeks = self.pos_bye_week_shell()
+        df_pos_weeks = pd.merge(
+            df_pos_weeks, df_entry_agg, how="left", on=["position", "bye_week"]
+        )
+        df_pos_weeks["num_players"] = df_pos_weeks["num_players"].fillna(0)
+
+        return df_pos_weeks
+
+    def team_pos_agg(self) -> pd.DataFrame:
+        df_entry_draft = self.df_draft.loc[
+            self.df_draft["draft_entry_id"] == self.draft_entry_id
+        ]
+
+        # df_draft doesn't contain any player attributes on it.
+        player_vars = ["appearance_id", "position", "bye_week", "abbr"]
+        df_entry_draft = pd.merge(
+            df_entry_draft, self.df_players[player_vars], how="left", on="appearance_id"
+        )
+
+        df_pos_team_agg = (
+            df_entry_draft.groupby(["position", "abbr"])
+            .size()
+            .to_frame("num_players")
+            .reset_index()
+        )
+        df_team_agg = (
+            df_entry_draft.groupby(["abbr"])
+            .size()
+            .to_frame("num_players")
+            .reset_index()
+        )
+        df_team_agg["position"] = "All Positions"
+        df_all_agg = pd.concat([df_pos_team_agg, df_team_agg])
+
+        df_shell = self.team_pos_shell()
+        df_team_pos = pd.merge(
+            df_shell, df_all_agg, how="left", on=["position", "abbr"]
+        )
+
+        df_team_pos["num_players"] = df_team_pos["num_players"].fillna(0)
+
+        return df_team_pos
+
+    def team_pos_trans_agg(self):
+        df = self.team_pos_agg()
+
+        # Need a list of tuples to create an additional level to the column index.
+        positions = list(df["position"].unique())
+        positions.sort()
+        pos_index = [("# of Players Drafted on Same Team", pos) for pos in positions]
+
+        full_index = [("", "abbr")] + pos_index
+        new_columns = pd.MultiIndex.from_tuples(full_index)
+
+        df = df.pivot_table(index="abbr", columns="position", values="num_players")
+        df.reset_index(inplace=True)
+
+        # df.columns = new_columns
+
+        return df
+
+    def pos_agg(self) -> pd.DataFrame:
+        df_entry_draft = self.df_draft.loc[
+            self.df_draft["draft_entry_id"] == self.draft_entry_id
+        ]
+
+        # df_draft doesn't contain any player attributes on it.
+        player_vars = ["appearance_id", "position", "bye_week", "abbr"]
+        df_entry_draft = pd.merge(
+            df_entry_draft, self.df_players[player_vars], how="left", on="appearance_id"
+        )
+
+        df = (
+            df_entry_draft.groupby("position")
+            .size()
+            .to_frame("num_players")
+            .reset_index()
+        )
+
+        df_all_pos = self.df_players[["position"]].dropna().drop_duplicates()
+        df = pd.merge(df_all_pos, df, how="left", on="position")
+
+        df["num_players"] = df["num_players"].fillna(0)
+
+        return df
+
+    def create_team_aggs(self) -> pd.DataFrame:
+        self.df_pos_bye_week = self.pos_bye_week_agg()
+        self.df_team_pos = self.team_pos_trans_agg()
+        self.df_pos = self.pos_agg()
+
+
 class Draft(SaveSessionState):
     def __init__(
         self, draft_params: dict, headers: dict, model, session_state=None
     ) -> None:
         super().__init__(session_state=session_state)
 
+        self.session_state = session_state
+
         self.initialize_session_state("draft_params", draft_params)
         self.initialize_session_state("headers", headers)
         self.initialize_session_state("model", model)
 
         self.initialize_session_state("new_draft_selected", True)
+        self.initialize_session_state("team_summary", None)
         self.initialize_session_state("df_draft", None)
         self.initialize_session_state("df_entries", None)
         self.initialize_session_state("df_players", None)
@@ -29,15 +193,16 @@ class Draft(SaveSessionState):
 
         if self.draft_params == draft_params:
             self.new_draft_selected = False
-
+        else:
             # Need to re-initialize these when a new draft is selected
+            self.team_summary = None
             self.df_draft = None
             self.df_entries = None
             self.df_players = None
             self.df_board = None
             self.df_cur_pick = None
             self.df_final_players = None
-        else:
+
             self.new_draft_selected = True
 
         self.draft_params = draft_params
@@ -218,8 +383,17 @@ class Draft(SaveSessionState):
             Draft board that contains the player selection made at each pick.
         """
 
+        merge_vars = ["draft_id", "draft_entry_id", "number"]
+        draft_vars = list(df_draft.columns)
+        board_vars = list(df_board.columns)
+
+        # Need to remove the
+        filtered_board_vars = [
+            var for var in board_vars if var not in draft_vars or var in merge_vars
+        ]
+
         df = pd.merge(
-            df_board, df_draft, how="left", on=["draft_id", "draft_entry_id", "number"]
+            df_board[filtered_board_vars], df_draft, how="left", on=merge_vars
         )
 
         return df
@@ -244,38 +418,6 @@ class Draft(SaveSessionState):
         df = df_board.loc[df_board["appearance_id"].isnull()].iloc[0:1]
 
         return df
-
-    def initialize_draft_attrs(self) -> None:
-        """
-        Initializes the df_draft, df_entries, and df_board attributes when
-        the app is opened or a new draft is selected
-        """
-
-        if self.df_board is None or self.new_draft_selected == True:
-            self.df_players = self.get_players(self.headers, self.draft_params)
-            self.df_entries = self.get_draft_entries(self.headers, self.draft_params)
-            self.df_board = self.create_draft_board(self.df_entries, self.draft_params)
-
-    def update_draft_attrs(self) -> None:
-        """
-        Updates draft attrs
-        """
-
-        # _get_draft throws an IndexError until the first pick is selected.
-        try:
-            self.df_draft = self.get_draft(self.headers, self.draft_params)
-            self.df_board = self.update_board(self.df_board, self.df_draft)
-
-            # This only gets updated once here to compare the current state's
-            # value to the newly updated board to determine if the model
-            # needs run again.
-            if self.df_cur_pick is None:
-                self.df_cur_pick = self.get_current_pick(self.df_board)
-            else:
-                pass
-
-        except IndexError:
-            pass
 
     @staticmethod
     def get_avail_players(
@@ -401,23 +543,74 @@ class Draft(SaveSessionState):
 
         return df
 
+    def merge_team_summaries(self, df_w_probs: pd.DataFrame) -> pd.DataFrame:
+        """
+        Merges team summary data onto the primary df of the app.
+        """
+
+        # team_summary = TeamSummary(
+        #     self.df_draft,
+        #     self.df_players,
+        #     self.draft_params["draft_entry_id"],
+        #     session_state=self.session_state,
+        # )
+
+        # df_pos_weeks = team_summary.pos_bye_week_agg()
+        # df_team_pos = team_summary.team_pos_trans_agg()
+
+        df_pos_weeks = self.team_summary.df_pos_bye_week
+        df_team_pos = self.team_summary.df_team_pos
+
+        df = pd.merge(df_w_probs, df_pos_weeks, how="left", on=["position", "bye_week"])
+        df = pd.merge(df, df_team_pos, how="left", on="abbr")
+
+        int_cols = ["num_players", "All Positions", "QB", "WR", "RB", "TE"]
+        df[int_cols] = df[int_cols].astype(pd.Int64Dtype())
+
+        return df
+
+    def initialize_draft_attrs(self) -> None:
+        """
+        Initializes the df_draft, df_entries, and df_board attributes when
+        the app is opened or a new draft is selected
+        """
+
+        if self.df_board is None or self.new_draft_selected == True:
+            self.df_players = self.get_players(self.headers, self.draft_params)
+            self.df_entries = self.get_draft_entries(self.headers, self.draft_params)
+            self.df_board = self.create_draft_board(self.df_entries, self.draft_params)
+
+    def update_draft_attrs(self) -> None:
+        """
+        Updates draft attrs
+        """
+
+        # get_draft throws an IndexError until the first pick is selected.
+        try:
+            self.df_draft = self.get_draft(self.headers, self.draft_params)
+            self.df_board = self.update_board(self.df_board, self.df_draft)
+
+            # This only gets updated once here to compare the current state's
+            # value to the newly updated board to determine if the model
+            # needs run again.
+            if self.df_cur_pick is None:
+                self.df_cur_pick = self.get_current_pick(self.df_board)
+            else:
+                pass
+
+        except IndexError:
+            pass
+
     def create_df_final_players(self) -> pd.DataFrame:
         """
         Selects the final columns to display
-
-        Parameters
-        ----------
-        df : pd.DataFrame
-            _description_
-
-        Returns
-        -------
-        pd.DataFrame
-            _description_
         """
 
         df_cur_pick = self.get_current_pick(self.df_board)
-        if df_cur_pick.equals(self.df_cur_pick) and self.df_draft is not None:
+        if (
+            self.df_final_players is None
+            or df_cur_pick.equals(self.df_cur_pick) == False
+        ) and self.df_draft is not None:
             self.df_cur_pick = df_cur_pick
 
             df_avail_players = self.get_avail_players(self.df_players, self.df_draft)
@@ -432,12 +625,28 @@ class Draft(SaveSessionState):
                 df_w_probs["first_name"] + " " + df_w_probs["last_name"]
             )
 
+            self.team_summary = TeamSummary(
+                self.df_draft,
+                self.df_players,
+                self.draft_params["draft_entry_id"],
+                session_state=self.session_state,
+            )
+            self.team_summary.create_team_aggs()
+            df_w_probs = self.merge_team_summaries(df_w_probs)
+
             rename_cols = {
                 "full_name": "Player",
                 "position": "Position",
                 "abbr": "Team",
                 "adp": "ADP",
-                "prob": "Next Pick Selected Probability",
+                "prob": "NPSP",
+                "All Positions": "All Positions",
+                "QB": "QB",
+                "WR": "WR",
+                "RB": "RB",
+                "TE": "TE",
+                # "bye_week": "Bye Week",
+                "num_players": "# of Pos/Bye Weeks",
             }
 
             df_w_probs = df_w_probs[list(rename_cols.keys())]

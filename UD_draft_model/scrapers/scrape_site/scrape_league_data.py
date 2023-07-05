@@ -611,6 +611,9 @@ class ReferenceData(BaseData):
             + "/appearances"
         )
         self.url_teams = "https://stats.underdogfantasy.com/v1/teams"
+        self.url_bye_weeks = (
+            "https://stats.underdogfantasy.com/v2/slates/" + self.slate_id + "/matches"
+        )
 
         base_url_player_scores = "https://stats.underdogfantasy.com/v1/weeks/"
         end_url_player_scores = (
@@ -629,6 +632,7 @@ class ReferenceData(BaseData):
         self.df_players = pd.DataFrame()
         self.df_appearances = pd.DataFrame()
         self.df_teams = pd.DataFrame()
+        self.df_bye_weeks = pd.DataFrame()
         self.df_players_master = pd.DataFrame()
         self.df_player_scores = pd.DataFrame()
 
@@ -712,6 +716,24 @@ class ReferenceData(BaseData):
 
         return final_df
 
+    def create_df_bye_weeks(self) -> pd.DataFrame:
+        self.json_bye_weeks = self.read_in_site_data(
+            self.url_bye_weeks, headers=self.auth_header
+        )
+
+        initial_scraped_df = self.create_scraped_data_df(
+            self.json_bye_weeks["matches"][0]["bye_weeks"]
+        )
+
+        initial_scraped_df.drop(["id", "year"], axis=1, inplace=True)
+        initial_scraped_df.rename(columns={"week": "bye_week"}, inplace=True)
+
+        initial_scraped_df["bye_week"] = initial_scraped_df["bye_week"].astype(
+            pd.Int64Dtype()
+        )
+
+        return initial_scraped_df
+
     def create_df_players_master(self) -> pd.DataFrame:
         """Creates a master lookup for player attributes"""
 
@@ -724,14 +746,17 @@ class ReferenceData(BaseData):
         if len(self.df_teams) == 0:
             self.df_teams = self.create_df_teams()
 
+        if len(self.df_bye_weeks) == 0:
+            self.df_bye_weeks = self.create_df_bye_weeks()
+
         # Team is more accurate in the df_players data and position from df_appearances
         # reflects the posisiton at the time of the draft
         df_appearances = self.df_appearances.drop(["team_id"], axis=1, inplace=False)
         df_players = self.df_players.drop(["position_id"], axis=1, inplace=False)
 
         final_df = pd.merge(df_appearances, df_players, on="player_id", how="left")
-
         final_df = pd.merge(final_df, self.df_teams, on="team_id", how="left")
+        final_df = pd.merge(final_df, self.df_bye_weeks, on="team_id", how="left")
 
         return final_df
 
@@ -964,47 +989,84 @@ if __name__ == "__main__":
     ####################### Get all DFs ##########################
     ##############################################################
 
-    import getpass
+    from os.path import join
 
-    import UD_draft_model.scrapers.scrape_site.pull_bearer_token as pb
+    from UD_draft_model.app.get_credentials import Credentials, get_headers
+    import UD_draft_model.credentials.credentials as _credentials
+    from UD_draft_model.app.draft import Draft
+
+    def get_draft_params(df_active: pd.DataFrame, draft_id: str) -> dict:
+        """
+        Creates a dict of parameters required to pull data for the draft_id passed.
+
+        Parameters
+        ----------
+        df_active : pd.DataFrame
+            All active drafts.
+        draft_id : str
+            ID of draft to create params for.
+
+        Returns
+        -------
+        dict
+            Required draft params.
+        """
+
+        df = df_active.loc[df_active["id"] == draft_id]
+
+        draft_entry_id = df["draft_entry_id"].iloc[0]
+        slate_id = df["slate_id"].iloc[0]
+        scoring_type_id = df["scoring_type_id"].iloc[0]
+        rounds = df["rounds"].iloc[0]
+        draft_status = df["status"].iloc[0]
+
+        params = {
+            "draft_entry_id": draft_entry_id,
+            "slate_id": slate_id,
+            "scoring_type_id": scoring_type_id,
+            "rounds": rounds,
+            "draft_id": draft_id,
+            "draft_status": draft_status,
+        }
+
+        return params
+
+    def get_active_drafts(headers: dict) -> pd.DataFrame:
+        active_drafts = DraftsActive(headers)
+        df_active = active_drafts.create_df_active_drafts()
+
+        print("Active drafts pulled")
+
+        return df_active
+
+    CHROMEDRIVER_PATH = "/usr/bin/chromedriver"
+
+    chromedriver_path = "/usr/bin/chromedriver"
+
+    username = _credentials.username
+    password = _credentials.password
+    headers = get_headers(username, password, chromedriver_path, save_headers=True)
+    valid_credentials = True
 
     pd.set_option("display.max_rows", 50)
     pd.set_option("display.max_columns", 50)
 
-    ### Variables to change ###
-    chromedriver_path = "/usr/bin/chromedriver"
-    username = input("Enter Underdog username: ")
-    # password = getpass.getpass()
+    df_active = get_active_drafts(headers)
+    params = get_draft_params(df_active, "81d2d037-7c65-4520-93b0-8df038877307")
 
-    ### Keep as is ###
-    # url = "https://underdogfantasy.com/lobby"
-    # bearer_token = pull_bearer_token(url, chromedriver_path, username, password)
+    refs = ReferenceData(headers, params["slate_id"], params["scoring_type_id"])
 
-    headers = pb.read_headers()[username]
-    valid_token = pb.test_headers(headers)
+    df_matches = refs.create_df_players_master()
 
-    if valid_token == False:
-        password = getpass.getpass()
-        url = "https://underdogfantasy.com/lobby"
-        bearer_token = pb.pull_bearer_token(url, chromedriver_path, username, password)
+    # print(refs.json_matches["matches"][0].keys())
 
-        pb.save_bearer_token(username, bearer_token)
-
+    print(df_matches)
     ### Pull all major UD data elements ###
-    draft_id = "2d30ccdc-4b4a-4d19-9532-d13b1cc33a3b"
-    draft_detail = DraftsDetail([draft_id], headers)
-    drafts_active = DraftsActive(headers)
-    slates = Slates(headers, "completed")
-    df_slates = slates.create_df_slates()
-    slate = slates.slates[0]
-    drafts = Drafts(headers, slate)
+    # draft_id = "2d30ccdc-4b4a-4d19-9532-d13b1cc33a3b"
+    # draft_detail = DraftsDetail([draft_id], headers)
+    # drafts_active = DraftsActive(headers)
+    # slates = Slates(headers, "completed")
+    # df_slates = slates.create_df_slates()
+    # slate = slates.slates[0]
+    # drafts = Drafts(headers, slate)
     # refs = ReferenceData(headers, slate.id, )
-
-    df_a = draft_detail.create_df_drafts()
-    df_b = drafts_active.create_df_active_drafts()
-
-    # print(df_a)
-    print(type(slate.id))
-    # print(drafts_active.auth_header)
-
-    # underdog_data = create_underdog_df_dict(bearer_token, sleep_time=5)
