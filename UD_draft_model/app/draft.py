@@ -227,6 +227,7 @@ class Draft(SaveSessionState):
             headers, params["slate_id"], params["scoring_type_id"]
         )
         df_players = refs.create_df_players_master()
+        df_players["adp_rank"] = df_players.index + 1
 
         return df_players
 
@@ -307,7 +308,57 @@ class Draft(SaveSessionState):
             df["user_next_pick_number_2"],
         )
 
+        # This is needed to show how many picks away the user is from selecting next.
+        df["actual_next_pick_number"] = np.where(
+            df["number"] < df["user_number"],
+            df["user_number"],
+            df["user_next_pick_number"],
+        )
+        df["num_picks_away"] = df["actual_next_pick_number"] - df["number"]
+
         df.drop(columns=list(rename_vars.values()), inplace=True)
+
+        return df
+
+    @staticmethod
+    def add_round_pick_str(
+        df: pd.DataFrame, num_teams: int, pick_col: str, out_col: str
+    ) -> pd.DataFrame:
+        """
+        Creates a column which formats the pick_col as Round.Pick (e.g. 5.8).
+
+        Parameters
+        ----------
+        df : pd.DataFrame
+            Dataframe to add column to.
+        num_teams : int
+            Number of teams in the league.
+        pick_col : str
+            Column name containing the pick number.
+        out_col : str
+            Name of the new column.
+
+        Returns
+        -------
+        pd.DataFrame
+            Dataframe passed with an additional column (out_col).
+        """
+        df["_tmp_round"] = np.where(
+            df[pick_col] % num_teams == 0,
+            (df[pick_col].fillna(0) / num_teams).astype(int),
+            ((df[pick_col].fillna(0) / num_teams) + 1).astype(int),
+        )
+        df["_tmp_round_pick"] = np.where(
+            df[pick_col] % num_teams == 0,
+            int(num_teams),
+            (df[pick_col].fillna(0) % num_teams).astype(int),
+        )
+
+        df[out_col] = (
+            df["_tmp_round"].astype(str) + "." + df["_tmp_round_pick"].astype(str)
+        )
+        df[out_col] = np.where(df[pick_col].isna(), "N/A", df[out_col])
+        df.drop(columns=["_tmp_round", "_tmp_round_pick"], inplace=True)
 
         return df
 
@@ -362,6 +413,13 @@ class Draft(SaveSessionState):
 
         df = prepare_drafts.add_next_pick_number(df, filter_nulls=False)
         df = self.add_user_next_pick_number(df, params["draft_entry_id"])
+
+        df = self.add_round_pick_str(
+            df, len(df_entries), "number", "current_round_pick"
+        )
+        df = self.add_round_pick_str(
+            df, len(df_entries), "actual_next_pick_number", "actual_next_round_pick"
+        )
 
         return df
 
@@ -582,7 +640,7 @@ class Draft(SaveSessionState):
 
     def update_draft_attrs(self) -> None:
         """
-        Updates draft attrs
+        Updates draft attrs.
         """
 
         # get_draft throws an IndexError until the first pick is selected.
@@ -603,7 +661,7 @@ class Draft(SaveSessionState):
 
     def create_df_final_players(self) -> pd.DataFrame:
         """
-        Selects the final columns to display
+        Creates the final remaining players dataframe.
         """
 
         df_cur_pick = self.get_current_pick(self.df_board)
@@ -633,14 +691,17 @@ class Draft(SaveSessionState):
             )
             self.team_summary.create_team_aggs()
             df_w_probs = self.merge_team_summaries(df_w_probs)
-
+            df_w_probs = self.add_round_pick_str(
+                df_w_probs, len(self.df_entries), "adp_rank", "adp_rank_round_pick"
+            )
             rename_cols = {
                 "full_name": "Player",
                 "position": "Position",
                 "abbr": "Team",
                 "adp": "ADP",
+                "adp_rank_round_pick": "ADP Rank",
                 "prob": "NPSP",
-                "All Positions": "All Positions",
+                "All Positions": "All Pos",
                 "QB": "QB",
                 "WR": "WR",
                 "RB": "RB",

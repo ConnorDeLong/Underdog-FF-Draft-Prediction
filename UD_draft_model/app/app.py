@@ -93,11 +93,11 @@ def get_active_drafts(headers: dict) -> pd.DataFrame:
 
 
 def refresh_drafts(headers: dict):
+    clear_cache()
     return get_active_drafts(headers)
 
 
 def select_draft(draft_ids: list, headers: dict) -> str:
-
     with st.sidebar:
         draft_id = st.selectbox("Select draft", draft_ids, on_change=clear_cache)
         st.button("Refresh", on_click=refresh_drafts, args=[headers])
@@ -112,10 +112,34 @@ def clear_cache() -> None:
     st.cache_data.clear()
 
 
+def display_current_next_pick(df_cur_pick: pd.DataFrame, column) -> None:
+    current_drafter = draft.df_cur_pick["username"].iloc[0]
+    current_pick = draft.df_cur_pick["current_round_pick"].iloc[0]
+    user_next_pick = draft.df_cur_pick["actual_next_round_pick"].iloc[0]
+
+    column.markdown(
+        f"""
+        <div style="display: flex; flex-direction: column; align-items: center; width: 200px;">
+            <p style="margin: 0;"><strong>{current_drafter}<strong/></p>
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 200px;">
+                <div style="text-align: center;">
+                    <p style="text-decoration: underline; margin-bottom: 1px;">Current Pick</p>
+                    <p style="font-size: 1em; margin: 0;">{current_pick}</p>
+                </div>
+                <div style="text-align: center;">
+                    <p style="text-decoration: underline; margin-bottom: 1px;">User Next Pick</p>
+                    <p style="font-size: 1em; margin: 0;">{user_next_pick}</p>
+                </div>
+            </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+
 def display_picks_by_pos(
     column: DeltaGenerator, position: str, num_picks: int, color: str
 ) -> str:
-
     top_md = f"""
         <div
             style='text-align: center; color: {color}; font-weight: bold'
@@ -137,7 +161,6 @@ def display_picks_by_pos(
 
 
 def display_all_picks_by_pos(df_pos: pd.DataFrame):
-
     num_qb = int(df_pos.loc[df_pos["position"] == "QB"]["num_players"])
     num_rb = int(df_pos.loc[df_pos["position"] == "RB"]["num_players"])
     num_wr = int(df_pos.loc[df_pos["position"] == "WR"]["num_players"])
@@ -210,43 +233,6 @@ def create_team_pos_chart(df_team_pos: pd.DataFrame):
     return fig
 
 
-def set_page_container_style(
-    max_width: int = 1100,
-    max_width_100_percent: bool = False,
-    padding_top: int = 1,
-    padding_right: int = 10,
-    padding_left: int = 1,
-    padding_bottom: int = 10,
-    color: str = "white",
-    background_color: str = "black",
-):
-    if max_width_100_percent:
-        max_width_str = f"max-width: 100%;"
-    else:
-        max_width_str = f"max-width: {max_width}px;"
-    st.markdown(
-        f"""
-            <style>
-                .reportview-container .sidebar-content {{
-                    padding-top: {padding_top}rem;
-                }}
-                .reportview-container .main .block-container {{
-                    {max_width_str}
-                    padding-top: {padding_top}rem;
-                    padding-right: {padding_right}rem;
-                    padding-left: {padding_left}rem;
-                    padding-bottom: {padding_bottom}rem;
-                }}
-                .reportview-container .main {{
-                    color: {color};
-                    background-color: {background_color};
-                }}
-            </style>
-            """,
-        unsafe_allow_html=True,
-    )
-
-
 if __name__ == "__main__":
     st.set_page_config(layout="wide")
 
@@ -293,11 +279,16 @@ if __name__ == "__main__":
                 draft.create_df_final_players()
 
                 if draft.df_final_players is not None:
+                    teams = list(
+                        draft.df_players["abbr"].drop_duplicates().sort_values()
+                    )
+                    teams.insert(0, "All Teams")
+                    teams = tuple(teams)
                     with c1:
                         container = st.container()
 
                         with container:
-                            c1_0, c1_1 = st.columns(2)
+                            c1_0, c1_1, c1_2, c1_3 = st.columns(4)
                             pos_selected = c1_0.selectbox(
                                 "Position Filter",
                                 ("All Positions", "QB", "WR", "RB", "TE"),
@@ -305,6 +296,9 @@ if __name__ == "__main__":
                             stack_selected = c1_1.selectbox(
                                 "Stack Filter", ("Any Player", "Stack Players")
                             )
+                            team_selected = c1_2.selectbox("Teams", teams)
+
+                            display_current_next_pick(draft.df_cur_pick, c1_3)
 
                         df = draft.df_final_players
 
@@ -312,15 +306,22 @@ if __name__ == "__main__":
                             pos_filter = df.index >= 0
                         else:
                             pos_filter = df["Position"] == pos_selected
+
                         if stack_selected == "Any Player":
                             stack_filter = df.index >= 0
                         else:
                             stack_filter = df["All Positions"] > 0
 
-                        df = df.loc[(pos_filter & stack_filter)]
+                        if team_selected == "All Teams":
+                            team_filter = df.index >= 0
+                        else:
+                            team_filter = df["Team"] == team_selected
+
+                        df = df.loc[(pos_filter & stack_filter & team_filter)]
 
                         st.dataframe(df)
                         st.dataframe(draft.df_cur_pick)
+                        st.dataframe(draft.df_players)
 
                     with c2:
                         container = st.container()
@@ -350,5 +351,30 @@ if __name__ == "__main__":
         with c1:
             st.button("Refresh player board")
 
-    # from streamlit_autorefresh import st_autorefresh
-    # count = st_autorefresh(interval=1000, limit=100, key="fizzbuzzcounter")
+
+import streamlit as st
+
+html_code = """
+    <select id="dropdown">
+        <option value="1">1</option>
+        <option value="2">2</option>
+        <option value="3">3</option>
+        <option value="4">4</option>
+        <option value="5">5</option>
+    </select>
+    <script>
+        document.getElementById("dropdown").onchange = function() {
+            let selectedValue = this.value;
+            streamlit.setComponentValue(selectedValue);
+        }
+    </script>
+"""
+
+selected_value = st.markdown(html_code, unsafe_allow_html=True)
+
+if selected_value:
+    st.write(f"You selected: {selected_value}")
+
+
+# from streamlit_autorefresh import st_autorefresh
+# count = st_autorefresh(interval=1000, limit=100, key="fizzbuzzcounter")
