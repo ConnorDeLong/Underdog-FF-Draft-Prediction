@@ -601,20 +601,34 @@ class Draft(SaveSessionState):
 
         return df
 
+    def should_update_final_players_df(self) -> bool:
+        """
+        Returns True if the final players board hasn't been created or
+        the object's existing pick to have been selected while the draft
+        is active.
+
+        This is used to prevent repeating several unecessary steps against
+        the same data when the app is refreshed.
+        """
+        df_cur_pick = self.get_current_pick(self.df_board)
+        return (
+            self.df_final_players is None
+            or not df_cur_pick.equals(self.df_cur_pick)
+            and self.df_draft is not None
+        )
+
     def merge_team_summaries(self, df_w_probs: pd.DataFrame) -> pd.DataFrame:
         """
         Merges team summary data onto the primary df of the app.
         """
 
-        # team_summary = TeamSummary(
-        #     self.df_draft,
-        #     self.df_players,
-        #     self.draft_params["draft_entry_id"],
-        #     session_state=self.session_state,
-        # )
-
-        # df_pos_weeks = team_summary.pos_bye_week_agg()
-        # df_team_pos = team_summary.team_pos_trans_agg()
+        self.team_summary = TeamSummary(
+            self.df_draft,
+            self.df_players,
+            self.draft_params["draft_entry_id"],
+            session_state=self.session_state,
+        )
+        self.team_summary.create_team_aggs()
 
         df_pos_weeks = self.team_summary.df_pos_bye_week
         df_team_pos = self.team_summary.df_team_pos
@@ -626,6 +640,25 @@ class Draft(SaveSessionState):
         df[int_cols] = df[int_cols].astype(pd.Int64Dtype())
 
         return df
+
+    def rename_final_players_columns(self, df: pd.DataFrame) -> pd.DataFrame:
+        rename_cols = {
+            "full_name": "Player",
+            "position": "Position",
+            "abbr": "Team",
+            "adp": "ADP",
+            "adp_rank_round_pick": "ADP Rank",
+            "prob": "NPSP",
+            "All Positions": "All Pos",
+            "QB": "QB",
+            "WR": "WR",
+            "RB": "RB",
+            "TE": "TE",
+            "num_players": "# of Pos/Bye Weeks",
+        }
+
+        df = df[list(rename_cols.keys())]
+        return df.rename(columns=rename_cols)
 
     def initialize_draft_attrs(self) -> None:
         """
@@ -664,53 +697,36 @@ class Draft(SaveSessionState):
         Creates the final remaining players dataframe.
         """
 
-        df_cur_pick = self.get_current_pick(self.df_board)
-        if (
-            self.df_final_players is None
-            or df_cur_pick.equals(self.df_cur_pick) == False
-        ) and self.df_draft is not None:
-            self.df_cur_pick = df_cur_pick
+        # Check if final players DataFrame needs updating
+        if not self.should_update_final_players_df():
+            return
 
-            df_avail_players = self.get_avail_players(self.df_players, self.df_draft)
-            df_w_players = self.add_avail_players(self.df_cur_pick, df_avail_players)
+        # Update the current pick DataFrame
+        self.df_cur_pick = self.get_current_pick(self.df_board)
 
-            df_w_features = add_features.add_features(df_w_players)
+        # Retrieve available players
+        df_available_players = self.get_avail_players(self.df_players, self.df_draft)
 
-            probs = self.create_predictions(df_w_features, self.model)
-            df_w_probs = self.merge_prediction(df_w_features, probs, "prob")
+        # Add available players to current pick DataFrame
+        df_with_players = self.add_avail_players(self.df_cur_pick, df_available_players)
 
-            df_w_probs["full_name"] = (
-                df_w_probs["first_name"] + " " + df_w_probs["last_name"]
-            )
+        # Add features to the DataFrame
+        df_with_features = add_features.add_features(df_with_players)
 
-            self.team_summary = TeamSummary(
-                self.df_draft,
-                self.df_players,
-                self.draft_params["draft_entry_id"],
-                session_state=self.session_state,
-            )
-            self.team_summary.create_team_aggs()
-            df_w_probs = self.merge_team_summaries(df_w_probs)
-            df_w_probs = self.add_round_pick_str(
-                df_w_probs, len(self.df_entries), "adp_rank", "adp_rank_round_pick"
-            )
-            rename_cols = {
-                "full_name": "Player",
-                "position": "Position",
-                "abbr": "Team",
-                "adp": "ADP",
-                "adp_rank_round_pick": "ADP Rank",
-                "prob": "NPSP",
-                "All Positions": "All Pos",
-                "QB": "QB",
-                "WR": "WR",
-                "RB": "RB",
-                "TE": "TE",
-                # "bye_week": "Bye Week",
-                "num_players": "# of Pos/Bye Weeks",
-            }
+        # Create predictions
+        probabilities = self.create_predictions(df_with_features, self.model)
 
-            df_w_probs = df_w_probs[list(rename_cols.keys())]
-            self.df_final_players = df_w_probs.rename(columns=rename_cols)
-        else:
-            pass
+        # Merge predictions to the DataFrame
+        df_with_probs = self.merge_prediction(df_with_features, probabilities, "prob")
+
+        # Update the full_name column and team summary
+        df_with_probs["full_name"] = (
+            df_with_probs["first_name"] + " " + df_with_probs["last_name"]
+        )
+
+        # Add team summaries, round pick string, and rename columns
+        df_with_probs = self.merge_team_summaries(df_with_probs)
+        df_with_probs = self.add_round_pick_str(
+            df_with_probs, len(self.df_entries), "adp_rank", "adp_rank_round_pick"
+        )
+        self.df_final_players = self.rename_final_players_columns(df_with_probs)
