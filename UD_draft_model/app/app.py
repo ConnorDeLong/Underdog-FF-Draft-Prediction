@@ -112,7 +112,86 @@ def clear_cache() -> None:
     st.cache_data.clear()
 
 
+def initialize_draft(valid_credentials: bool) -> tuple:
+    """
+    Ensures that credentials have passed, a selected draft is active,
+    and it is currently in the draft process.
+
+    Parameters
+    ----------
+    valid_credentials : bool
+        Determines whether or not the user passed valid credentials
+        required to scrape a draft.
+
+    Returns
+    -------
+    tuple
+        First element is true if credentials are passed and there's an
+        active draft. Second element is an instance of a Draft obejct
+        whose primary attributes are updated to reflect the draft in
+        progress.
+    """
+    if not valid_credentials:
+        return False, None
+
+    df_active = get_active_drafts(headers)
+
+    if df_active is None:
+        return False, None
+
+    draft_ids = tuple(df_active["id"])
+    draft_id = select_draft(draft_ids, headers)
+    params = get_draft_params(df_active, draft_id)
+    draft = Draft(params, headers, model, session_state=st.session_state)
+
+    # Check if we're currently drafting and initialize and update draft attributes
+    if params["draft_status"] == "drafting":
+        draft.initialize_draft_attrs()
+        draft.update_draft_attrs()
+        draft.create_df_final_players()
+        return True, draft
+
+    return False, draft
+
+
+def filter_avail_players(cols: list, draft: Draft) -> pd.DataFrame:
+    """
+    Creates drop-downs in the app and filters the df accordingly.
+    """
+    teams = list(draft.df_players["abbr"].drop_duplicates().sort_values())
+    teams.insert(0, "All Teams")
+    teams = tuple(teams)
+
+    df = draft.df_final_players
+
+    # Create the drop-downs.
+    pos_selected = cols[0].selectbox(
+        "Position Filter",
+        ("All Positions", "QB", "WR", "RB", "TE"),
+    )
+    stack_selected = cols[1].selectbox("Stack Filter", ("Any Player", "Stack Players"))
+    team_selected = cols[2].selectbox("Teams", teams)
+
+    # Set defaults.
+    pos_filter = df.index >= 0
+    stack_filter = df.index >= 0
+    team_filter = df.index >= 0
+
+    # Filter on selected values.
+    if pos_selected != "All Positions":
+        pos_filter = df["Position"] == pos_selected
+    if stack_selected != "Any Player":
+        stack_filter = df["All Pos"] > 0
+    if team_selected != "All Teams":
+        team_filter = df["Team"] == team_selected
+
+    df = df.loc[(pos_filter & stack_filter & team_filter)]
+
+    return df
+
+
 def display_current_next_pick(df_cur_pick: pd.DataFrame, column) -> None:
+    """ """
     current_drafter = draft.df_cur_pick["username"].iloc[0]
     current_pick = draft.df_cur_pick["current_round_pick"].iloc[0]
     user_next_pick = draft.df_cur_pick["actual_next_round_pick"].iloc[0]
@@ -137,7 +216,7 @@ def display_current_next_pick(df_cur_pick: pd.DataFrame, column) -> None:
     )
 
 
-def display_picks_by_pos(
+def _display_picks_by_pos(
     column: DeltaGenerator, position: str, num_picks: int, color: str
 ) -> str:
     top_md = f"""
@@ -160,19 +239,26 @@ def display_picks_by_pos(
     return None
 
 
-def display_all_picks_by_pos(df_pos: pd.DataFrame):
+def display_all_picks_by_pos(cols: list, df_pos: pd.DataFrame):
+    """
+    Displays the number of players drafted by position.
+    """
     num_qb = int(df_pos.loc[df_pos["position"] == "QB"]["num_players"])
     num_rb = int(df_pos.loc[df_pos["position"] == "RB"]["num_players"])
     num_wr = int(df_pos.loc[df_pos["position"] == "WR"]["num_players"])
     num_te = int(df_pos.loc[df_pos["position"] == "TE"]["num_players"])
 
-    display_picks_by_pos(c2_c1, "QB", num_qb, "rgb(150, 71, 184)")
-    display_picks_by_pos(c2_c2, "RB", num_rb, "rgb(21, 153, 126)")
-    display_picks_by_pos(c2_c3, "WR", num_wr, "rgb(230, 126, 34)")
-    display_picks_by_pos(c2_c4, "TE", num_te, "rgb(41, 128, 185)")
+    _display_picks_by_pos(cols[0], "QB", num_qb, "rgb(150, 71, 184)")
+    _display_picks_by_pos(cols[1], "RB", num_rb, "rgb(21, 153, 126)")
+    _display_picks_by_pos(cols[2], "WR", num_wr, "rgb(230, 126, 34)")
+    _display_picks_by_pos(cols[3], "TE", num_te, "rgb(41, 128, 185)")
 
 
 def create_team_pos_chart(df_team_pos: pd.DataFrame):
+    """
+    Creates a bar chart showing the number of players drafted
+    by Team/Position.
+    """
     df = df_team_pos.copy()
     df["team"] = df["abbr"]
 
@@ -207,15 +293,6 @@ def create_team_pos_chart(df_team_pos: pd.DataFrame):
             )
         )
 
-    # fig.add_trace(go.Scatter(
-    #     y=df['team'],
-    #     x=df["Total"],
-    #     text=df["Total"],
-    #     mode='text',
-    #     textposition='middle right',
-    #     showlegend=False
-    # ))
-
     # Set the chart title and axis labels
     fig.update_layout(
         title="",
@@ -233,28 +310,16 @@ def create_team_pos_chart(df_team_pos: pd.DataFrame):
     return fig
 
 
-def initialize_draft(valid_credentials: bool):
-    if not valid_credentials:
-        return False, None
-
-    df_active = get_active_drafts(headers)
-
-    if df_active is None:
-        return False, None
-
-    draft_ids = tuple(df_active["id"])
-    draft_id = select_draft(draft_ids, headers)
-    params = get_draft_params(df_active, draft_id)
-    draft = Draft(params, headers, model, session_state=st.session_state)
-
-    # Check if we're currently drafting and initialize and update draft attributes
-    if params["draft_status"] == "drafting":
-        draft.initialize_draft_attrs()
-        draft.update_draft_attrs()
-        draft.create_df_final_players()
-        return True, draft
-
-    return False, draft
+def display_team_pos_chart(col, draft: Draft) -> None:
+    df_team_pos = draft.team_summary.df_team_pos
+    df_team_pos = df_team_pos.loc[
+        df_team_pos["abbr"].isin(
+            df_team_pos.loc[df_team_pos["All Positions"] > 0]["abbr"]
+        )
+    ]
+    if len(df_team_pos) > 0:
+        fig = create_team_pos_chart(df_team_pos)
+        col.plotly_chart(fig, use_container_width=True)
 
 
 if __name__ == "__main__":
@@ -281,142 +346,35 @@ if __name__ == "__main__":
         unsafe_allow_html=True,
     )
 
+    # Set app Columns/Containers.
     c1, c2 = st.columns([3.5, 1])
 
+    c1_0 = c1.container()
+    c1_0_0, c1_0_1, c1_0_2, c1_0_3 = c1_0.columns(4)
+
+    c2_0 = c2.container()
+    c2_0_lens = [1.5, 1, 1, 1, 1, 1]
+    c2_0_0, c2_0_1, c2_0_2, c2_0_3, c2_0_4, c2_0_5 = c2_0.columns(c2_0_lens)
+
+    # Update app as the draft progresses.
     draft_initialized, draft = initialize_draft(valid_credentials)
     if draft_initialized:
         if draft.df_final_players is not None:
-            teams = list(draft.df_players["abbr"].drop_duplicates().sort_values())
-            teams.insert(0, "All Teams")
-            teams = tuple(teams)
-
-            c1_0 = c1.container()
-
-            c1_0_0, c1_0_1, c1_0_2, c1_0_3 = c1_0.columns(4)
-            pos_selected = c1_0_0.selectbox(
-                "Position Filter",
-                ("All Positions", "QB", "WR", "RB", "TE"),
-            )
-            stack_selected = c1_0_1.selectbox(
-                "Stack Filter", ("Any Player", "Stack Players")
-            )
-            team_selected = c1_0_2.selectbox("Teams", teams)
-
+            df = filter_avail_players([c1_0_0, c1_0_1, c1_0_2], draft)
             display_current_next_pick(draft.df_cur_pick, c1_0_3)
-
-            df = draft.df_final_players
-
-            if pos_selected == "All Positions":
-                pos_filter = df.index >= 0
-            else:
-                pos_filter = df["Position"] == pos_selected
-
-            if stack_selected == "Any Player":
-                stack_filter = df.index >= 0
-            else:
-                stack_filter = df["All Pos"] > 0
-
-            if team_selected == "All Teams":
-                team_filter = df.index >= 0
-            else:
-                team_filter = df["Team"] == team_selected
-
-            df = df.loc[(pos_filter & stack_filter & team_filter)]
-
             c1.dataframe(df)
-            c1.dataframe(draft.df_cur_pick)
-            c1.dataframe(draft.df_players)
 
-            with c2:
-                container = st.container()
+            cols = [c2_0_1, c2_0_2, c2_0_3, c2_0_4, c2_0_5]
+            display_all_picks_by_pos(cols, draft.team_summary.df_pos)
 
-                df_team_pos = draft.team_summary.df_team_pos
-                df_team_pos = df_team_pos.loc[
-                    df_team_pos["abbr"].isin(
-                        df_team_pos.loc[df_team_pos["All Positions"] > 0]["abbr"]
-                    )
-                ]
+            display_team_pos_chart(c2, draft)
 
-                with container:
-                    c2_0, c2_c1, c2_c2, c2_c3, c2_c4, c2_999 = st.columns(
-                        [1, 1, 1, 1, 1, 1]
-                    )
-                    display_all_picks_by_pos(draft.team_summary.df_pos)
-
-                if len(df_team_pos) > 0:
-                    fig = create_team_pos_chart(df_team_pos)
-                    st.plotly_chart(fig, use_container_width=True)
-
-        # if draft.df_final_players is not None:
-        #     teams = list(draft.df_players["abbr"].drop_duplicates().sort_values())
-        #     teams.insert(0, "All Teams")
-        #     teams = tuple(teams)
-        #     with c1:
-        #         container = st.container()
-
-        #         with container:
-        #             c1_0, c1_1, c1_2, c1_3 = st.columns(4)
-        #             pos_selected = c1_0.selectbox(
-        #                 "Position Filter",
-        #                 ("All Positions", "QB", "WR", "RB", "TE"),
-        #             )
-        #             stack_selected = c1_1.selectbox(
-        #                 "Stack Filter", ("Any Player", "Stack Players")
-        #             )
-        #             team_selected = c1_2.selectbox("Teams", teams)
-
-        #             display_current_next_pick(draft.df_cur_pick, c1_3)
-
-        #         df = draft.df_final_players
-
-        #         if pos_selected == "All Positions":
-        #             pos_filter = df.index >= 0
-        #         else:
-        #             pos_filter = df["Position"] == pos_selected
-
-        #         if stack_selected == "Any Player":
-        #             stack_filter = df.index >= 0
-        #         else:
-        #             stack_filter = df["All Pos"] > 0
-
-        #         if team_selected == "All Teams":
-        #             team_filter = df.index >= 0
-        #         else:
-        #             team_filter = df["Team"] == team_selected
-
-        #         df = df.loc[(pos_filter & stack_filter & team_filter)]
-
-        #         st.dataframe(df)
-        #         st.dataframe(draft.df_cur_pick)
-        #         st.dataframe(draft.df_players)
-
-        #     with c2:
-        #         container = st.container()
-
-        #         df_team_pos = draft.team_summary.df_team_pos
-        #         df_team_pos = df_team_pos.loc[
-        #             df_team_pos["abbr"].isin(
-        #                 df_team_pos.loc[df_team_pos["All Positions"] > 0]["abbr"]
-        #             )
-        #         ]
-
-        #         with container:
-        #             c2_0, c2_c1, c2_c2, c2_c3, c2_c4, c2_999 = st.columns(
-        #                 [1, 1, 1, 1, 1, 1]
-        #             )
-        #             display_all_picks_by_pos(draft.team_summary.df_pos)
-
-        #         if len(df_team_pos) > 0:
-        #             fig = create_team_pos_chart(df_team_pos)
-        #             st.plotly_chart(fig, use_container_width=True)
     else:
-        with c1:
-            st.write("Draft has not been filled")
+        c1.write("Draft has not been filled")
 
     c1.button("Refresh player board")
 
-
-import streamlit as st
+# import streamlit as st
 
 # from streamlit_autorefresh import st_autorefresh
 # count = st_autorefresh(interval=1000, limit=100, key="fizzbuzzcounter")

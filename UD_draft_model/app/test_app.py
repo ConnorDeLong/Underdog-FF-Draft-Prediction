@@ -17,7 +17,6 @@ from UD_draft_model.app.save_session_state import SaveSessionState
 def display_picks_by_pos(
     column: DeltaGenerator, position: str, num_picks: int, color: str
 ) -> str:
-
     top_md = f"""
         <div
             style='text-align: center; color: {color}; font-weight: bold'
@@ -38,21 +37,27 @@ def display_picks_by_pos(
     return None
 
 
-var = "test this"
+# var = "test this"
 
-c1, c2 = st.columns(2)
+# c1, c2 = st.columns(2)
 
-st.write(type(c1))
+# st.write(type(c1))
 
-c1.write("this is the left column")
+# c1.write("this is the left column")
 
-with c2:
-    container = st.container()
+# with c2:
+#     container = st.container()
 
-    with container:
-        c2_0, c2_c1, c2_c2, c2_c3, c2_c4, c2_999 = st.columns([4, 1, 1, 1, 1, 4])
+#     with container:
+#         c2_0, c2_c1, c2_c2, c2_c3, c2_c4, c2_999 = st.columns([4, 1, 1, 1, 1, 4])
 
-        display_picks_by_pos(c2_c1, "QB", 1, "rgb(150, 71, 184)")
-        display_picks_by_pos(c2_c2, "RB", 1, "green")
-        display_picks_by_pos(c2_c3, "WR", 1, "orange")
-        display_picks_by_pos(c2_c4, "TE", 1, "blue")
+#         display_picks_by_pos(c2_c1, "QB", 1, "rgb(150, 71, 184)")
+#         display_picks_by_pos(c2_c2, "RB", 1, "green")
+#         display_picks_by_pos(c2_c3, "WR", 1, "orange")
+#         display_picks_by_pos(c2_c4, "TE", 1, "blue")
+
+c1, c2 = st.columns([3.5, 1])
+
+c1_0 = c1.container()
+
+c1_0_0, c1_0_1, c1_0_2, c1_0_3 = c1_0.columns(4)
