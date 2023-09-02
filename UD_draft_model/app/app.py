@@ -112,7 +112,7 @@ def clear_cache() -> None:
     st.cache_data.clear()
 
 
-def initialize_draft(valid_credentials: bool) -> tuple:
+def initialize_draft(headers: dict, valid_credentials: bool) -> tuple:
     """
     Ensures that credentials have passed, a selected draft is active,
     and it is currently in the draft process.
@@ -346,35 +346,55 @@ if __name__ == "__main__":
         unsafe_allow_html=True,
     )
 
-    # Set app Columns/Containers.
+    # Columns to store the df of remaining players and a summary of drafted players.
     c1, c2 = st.columns([3.5, 1])
 
+    # Container and columns for filtering remaining players df.
     c1_0 = c1.container()
     c1_0_0, c1_0_1, c1_0_2, c1_0_3 = c1_0.columns(4)
 
+    # Container and columns for the summary.
     c2_0 = c2.container()
     c2_0_lens = [1.5, 1, 1, 1, 1, 1]
     c2_0_0, c2_0_1, c2_0_2, c2_0_3, c2_0_4, c2_0_5 = c2_0.columns(c2_0_lens)
 
     # Update app as the draft progresses.
-    draft_initialized, draft = initialize_draft(valid_credentials)
-    if draft_initialized:
-        if draft.df_final_players is not None:
-            df = filter_avail_players([c1_0_0, c1_0_1, c1_0_2], draft)
-            display_current_next_pick(draft.df_cur_pick, c1_0_3)
-            c1.dataframe(df)
+    # try:
+    #     draft_initialized, draft = initialize_draft(headers, valid_credentials)
+    #     if draft_initialized:
+    #         if draft.df_final_players is not None:
+    #             df = filter_avail_players([c1_0_0, c1_0_1, c1_0_2], draft)
+    #             display_current_next_pick(draft.df_cur_pick, c1_0_3)
+    #             c1.dataframe(df)
 
-            cols = [c2_0_1, c2_0_2, c2_0_3, c2_0_4, c2_0_5]
-            display_all_picks_by_pos(cols, draft.team_summary.df_pos)
+    #             cols = [c2_0_1, c2_0_2, c2_0_3, c2_0_4, c2_0_5]
+    #             display_all_picks_by_pos(cols, draft.team_summary.df_pos)
 
-            display_team_pos_chart(c2, draft)
+    #             display_team_pos_chart(c2, draft)
 
-    else:
+    #     else:
+    #         c1.write("Draft has not been filled")
+    # except:
+    #     c1.write("Draft has not been filled")
+
+    try:
+        draft_initialized, draft = initialize_draft(headers, valid_credentials)
+
+        if not draft_initialized or draft.df_final_players is None:
+            raise Exception("Draft not initialized or players dataframe is None")
+
+        df = filter_avail_players([c1_0_0, c1_0_1, c1_0_2], draft)
+        display_current_next_pick(draft.df_cur_pick, c1_0_3)
+        c1.dataframe(df)
+
+        cols = [c2_0_1, c2_0_2, c2_0_3, c2_0_4, c2_0_5]
+        display_all_picks_by_pos(cols, draft.team_summary.df_pos)
+
+        display_team_pos_chart(c2, draft)
+
+    except Exception as e:
+        # For better debugging, you can also log or print the exception message.
+        print(str(e))
         c1.write("Draft has not been filled")
 
     c1.button("Refresh player board")
-
-# import streamlit as st
-
-# from streamlit_autorefresh import st_autorefresh
-# count = st_autorefresh(interval=1000, limit=100, key="fizzbuzzcounter")
