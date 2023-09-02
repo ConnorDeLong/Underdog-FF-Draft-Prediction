@@ -1,5 +1,6 @@
 UD_draft_model/scratch/
 UD_draft_model/credentials/
+UD_draft_model/scrapers/scrape_site/bearer_token/token.json
 notes.txt
 
 venv/

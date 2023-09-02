@@ -14,7 +14,6 @@ import UD_draft_model.scrapers.scrape_site.scrape_league_data as scrape_site
 
 
 def create_webdriver(url, chromedriver_path, username, password):
-
     capabilities = DesiredCapabilities.CHROME
     capabilities["goog:loggingPrefs"] = {"performance": "ALL"}
 
@@ -37,7 +36,6 @@ def create_webdriver(url, chromedriver_path, username, password):
 
 
 def pull_logs(url: str, chromedriver_path: str, username: str, password: str) -> dict:
-
     driver = create_webdriver(url, chromedriver_path, username, password)
 
     time.sleep(5)
@@ -50,7 +48,6 @@ def pull_logs(url: str, chromedriver_path: str, username: str, password: str) ->
 
 
 def pull_bearer_token(logs: dict) -> str:
-
     for log in logs:
         try:
             log_dict = json.loads(log["message"])
@@ -68,7 +65,6 @@ def pull_bearer_token(logs: dict) -> str:
 
 
 def pull_user_agent(logs: dict) -> str:
-
     for log in logs:
         try:
             log_dict = json.loads(log["message"])
@@ -83,7 +79,6 @@ def pull_user_agent(logs: dict) -> str:
 def pull_required_headers(
     url: str, chromedriver_path: str, username: str, password: str
 ) -> dict:
-
     logs = pull_logs(url, chromedriver_path, username, password)
 
     bearer_token = pull_bearer_token(logs)
@@ -110,7 +105,7 @@ def create_headers_path() -> str:
         base_path = cwd[:folder_end_index]
 
     token_dir = os.path.join(base_path, relative_path)
-    token_path = os.path.join(token_dir, "bearer_token.json")
+    token_path = os.path.join(token_dir, "token.json")
 
     return token_path
 
