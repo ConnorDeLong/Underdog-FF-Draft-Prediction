@@ -293,7 +293,6 @@ class DraftsDetail(BaseData):
 
 
 class DraftsActive(BaseData):
-
     url = "https://api.underdogfantasy.com/v3/user/active_drafts"
 
     def __init__(self, headers: str, clear_json_attrs: bool = True):
@@ -386,10 +385,10 @@ class Drafts(BaseData):
         """
         Creates a list of all urls which store draft level data for the slate.
         """
-
         try:
             tourney_league_urls = self._create_tourney_league_urls()
-        except IndexError:
+        except Exception as e:
+            print(f"{e} occurred - No tournament drafts found")
             tourney_league_urls = []
 
         if self.slate.draft_count > 0:
@@ -446,7 +445,6 @@ class Drafts(BaseData):
         tourney in order to find all entries in it - This creates of all tourney
         IDs that has at least one entry
         """
-
         json_tourney_league_ids = self.read_in_site_data(
             self.url_tourney_league_ids, headers=self.auth_header
         )
@@ -568,6 +566,11 @@ class Slates(BaseData):
 
 class Slate:
     def __init__(self, df_slate: pd.Series, slate_type):
+        if type(df_slate) is pd.DataFrame:
+            df_slate = df_slate.iloc[0]
+        elif type(df_slate) is not pd.Series:
+            raise Exception("df_slate must be passed as a df or series.")
+
         self.id = df_slate["id"]
         self.contest_style_ids = df_slate["contest_style_ids"]
         self.description = df_slate["description"]
@@ -695,9 +698,11 @@ class ReferenceData(BaseData):
         )
         final_df.drop(["projection"], axis=1, inplace=True)
 
-        df_pos_map = self._create_position_mapping(final_df)
-        final_df = pd.merge(final_df, df_pos_map, on="position_id", how="left")
-
+        # Note: There are scenarios (Taysom Hill) where the player's position ID
+        # and Position Rank does not align with his actual position.
+        # df_pos_map = self._create_position_mapping(final_df)
+        # final_df = pd.merge(final_df, df_pos_map, on="position_id", how="left")
+        final_df["position"] = final_df["position_rank"].str[0:2]
         final_df.rename(columns={"id": "appearance_id"}, inplace=True)
 
         return final_df
@@ -747,7 +752,10 @@ class ReferenceData(BaseData):
             self.df_teams = self.create_df_teams()
 
         if len(self.df_bye_weeks) == 0:
-            self.df_bye_weeks = self.create_df_bye_weeks()
+            try:
+                self.df_bye_weeks = self.create_df_bye_weeks()
+            except:
+                pass
 
         # Team is more accurate in the df_players data and position from df_appearances
         # reflects the posisiton at the time of the draft
@@ -756,7 +764,10 @@ class ReferenceData(BaseData):
 
         final_df = pd.merge(df_appearances, df_players, on="player_id", how="left")
         final_df = pd.merge(final_df, self.df_teams, on="team_id", how="left")
-        final_df = pd.merge(final_df, self.df_bye_weeks, on="team_id", how="left")
+        try:
+            final_df = pd.merge(final_df, self.df_bye_weeks, on="team_id", how="left")
+        except:
+            final_df["bye_week"] = "N/A"
 
         return final_df
 
@@ -914,7 +925,6 @@ class ContestRefs(BaseData):
     def create_df_contest_styles(
         self, headers: dict = None, clear_json: bool = False, update_attr: bool = False
     ) -> pd.DataFrame:
-
         if headers is None:
             headers = self.auth_header
 

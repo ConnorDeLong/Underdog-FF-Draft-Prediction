@@ -9,6 +9,7 @@ from requests import JSONDecodeError
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
+from selenium.webdriver.chrome.options import Options
 
 import UD_draft_model.scrapers.scrape_site.scrape_league_data as scrape_site
 
@@ -17,7 +18,10 @@ def create_webdriver(url, chromedriver_path, username, password):
     capabilities = DesiredCapabilities.CHROME
     capabilities["goog:loggingPrefs"] = {"performance": "ALL"}
 
-    driver = webdriver.Chrome(chromedriver_path)
+    options = Options()
+    options.add_argument("--headless")
+
+    driver = webdriver.Chrome(chromedriver_path, options=options)
     driver.get(url)
 
     # elem = driver.find_elements_by_class_name('styles__field__3fmc7')[0]
@@ -118,8 +122,11 @@ def read_headers(file_path: str = None) -> dict:
     if file_path is None:
         file_path = create_headers_path()
 
-    with open(file_path, "r") as f:
-        json_data = json.load(f)
+    try:
+        with open(file_path, "r") as f:
+            json_data = json.load(f)
+    except FileNotFoundError:
+        json_data = {}
 
     return json_data
 
@@ -132,10 +139,7 @@ def save_headers(username: str, headers: dict) -> None:
 
     token_path = create_headers_path()
 
-    try:
-        header_data = read_headers(file_path=token_path)
-    except FileNotFoundError:
-        header_data = {}
+    header_data = read_headers(file_path=token_path)
 
     header_data[username] = headers
 

@@ -147,8 +147,11 @@ def initialize_draft(headers: dict, valid_credentials: bool) -> tuple:
     # Check if we're currently drafting and initialize and update draft attributes
     if params["draft_status"] == "drafting":
         draft.initialize_draft_attrs()
+        print("draft initialized")
         draft.update_draft_attrs()
+        print("draft attrs updated")
         draft.create_df_final_players()
+        print("players df created")
         return True, draft
 
     return False, draft
@@ -331,20 +334,20 @@ if __name__ == "__main__":
 
     model = load_model(join(MODEL_PATH, MODEL))
 
-    username = _credentials.username
-    password = _credentials.password
-    headers = get_headers(username, password, CHROMEDRIVER_PATH, save_headers=True)
-    valid_credentials = True
-
-    # credentials = Credentials(CHROMEDRIVER_PATH, session_state=st.session_state)
-    # credentials.enter_ud_credentials()
-
-    # headers = credentials.headers
-    # valid_credentials = credentials.valid_credentials
     st.markdown(
         "<h1 style='text-align: center;'>Underdog Fantasy Football Draft Tool</h1>",
         unsafe_allow_html=True,
     )
+
+    # username = _credentials.username
+    # password = _credentials.password
+    # headers = get_headers(username, password, CHROMEDRIVER_PATH, save_headers=True)
+    # valid_credentials = True
+
+    credentials = Credentials(CHROMEDRIVER_PATH, session_state=st.session_state)
+    credentials.enter_ud_credentials()
+    headers = credentials.headers
+    valid_credentials = credentials.valid_credentials
 
     # Columns to store the df of remaining players and a summary of drafted players.
     c1, c2 = st.columns([3.5, 1])
@@ -359,26 +362,9 @@ if __name__ == "__main__":
     c2_0_0, c2_0_1, c2_0_2, c2_0_3, c2_0_4, c2_0_5 = c2_0.columns(c2_0_lens)
 
     # Update app as the draft progresses.
-    # try:
-    #     draft_initialized, draft = initialize_draft(headers, valid_credentials)
-    #     if draft_initialized:
-    #         if draft.df_final_players is not None:
-    #             df = filter_avail_players([c1_0_0, c1_0_1, c1_0_2], draft)
-    #             display_current_next_pick(draft.df_cur_pick, c1_0_3)
-    #             c1.dataframe(df)
-
-    #             cols = [c2_0_1, c2_0_2, c2_0_3, c2_0_4, c2_0_5]
-    #             display_all_picks_by_pos(cols, draft.team_summary.df_pos)
-
-    #             display_team_pos_chart(c2, draft)
-
-    #     else:
-    #         c1.write("Draft has not been filled")
-    # except:
-    #     c1.write("Draft has not been filled")
-
     try:
         draft_initialized, draft = initialize_draft(headers, valid_credentials)
+        print(draft_initialized)
 
         if not draft_initialized or draft.df_final_players is None:
             raise Exception("Draft not initialized or players dataframe is None")

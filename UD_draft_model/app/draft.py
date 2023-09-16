@@ -166,8 +166,11 @@ class TeamSummary(SaveSessionState):
 
     def create_team_aggs(self) -> pd.DataFrame:
         self.df_pos_bye_week = self.pos_bye_week_agg()
+        print("Position/Bye Week created")
         self.df_team_pos = self.team_pos_trans_agg()
+        print("Team/Position created")
         self.df_pos = self.pos_agg()
+        print("Position created")
 
 
 class Draft(SaveSessionState):
@@ -723,7 +726,7 @@ class Draft(SaveSessionState):
         df_with_probs["full_name"] = (
             df_with_probs["first_name"] + " " + df_with_probs["last_name"]
         )
-
+        print("check")
         # Add team summaries, round pick string, and rename columns
         df_with_probs = self.merge_team_summaries(df_with_probs)
         df_with_probs = self.add_round_pick_str(

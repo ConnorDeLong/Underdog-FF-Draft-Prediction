@@ -73,7 +73,6 @@ class Credentials(SaveSessionState):
         """
 
         if self.valid_credentials == False:
-
             placeholder = st.empty()
 
             with placeholder.form("Enter"):
