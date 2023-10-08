@@ -1,0 +1,12 @@
+UD_draft_model/scratch/
+UD_draft_model/credentials/
+UD_draft_model/notebooks/
+UD_draft_model/scrapers/scrape_site/bearer_token/token.json
+data/
+notes.txt
+
+venv/
+
+.ipynb_checkpoints/
+.vscode/
+__pycache__/

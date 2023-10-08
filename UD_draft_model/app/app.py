@@ -1,6 +1,7 @@
 # Does not properly re-load when the first pick is made. Need to refresh
 # browser or select new draft.
 
+import os
 from os.path import join
 import pickle
 
@@ -16,7 +17,7 @@ import UD_draft_model.scrapers.scrape_site.scrape_league_data as scrape_site
 from UD_draft_model.modeling.model_version import ModelVersion
 
 # REMOVE LATER
-import UD_draft_model.credentials.credentials as _credentials
+# import UD_draft_model.credentials.credentials as _credentials
 
 
 @st.cache_resource
@@ -328,7 +329,7 @@ def display_team_pos_chart(col, draft: Draft) -> None:
 if __name__ == "__main__":
     st.set_page_config(layout="wide")
 
-    CHROMEDRIVER_PATH = "/usr/bin/chromedriver"
+    CHROMEDRIVER_PATH = os.environ.get("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")
     MODEL_PATH = "../modeling/models"
     MODEL = "LogisticRegression_v01_v001"
 
