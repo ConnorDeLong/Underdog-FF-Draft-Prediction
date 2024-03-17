@@ -18,12 +18,14 @@ def create_webdriver(url, chromedriver_path, username, password):
     capabilities = DesiredCapabilities.CHROME
     capabilities["goog:loggingPrefs"] = {"performance": "ALL"}
 
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
+    # This was working before, but is now causing the 
+    # options = Options()
+    # options.add_argument("--headless")
+    # options.add_argument("--no-sandbox")
+    # options.add_argument("--disable-dev-shm-usage")
 
-    driver = webdriver.Chrome(chromedriver_path, options=options)
+    # driver = webdriver.Chrome(chromedriver_path, options=options)
+    driver = webdriver.Chrome(chromedriver_path)
     driver.get(url)
 
     # elem = driver.find_elements_by_class_name('styles__field__3fmc7')[0]
@@ -181,11 +183,15 @@ if __name__ == "__main__":
     pass
 
     import getpass
+    import UD_draft_model.credentials.credentials as _credentials
 
     ### Variables to change ###
-    # chromedriver_path = "/usr/bin/chromedriver"
+    chromedriver_path = "/usr/bin/chromedriver"
     # username = input("Enter Underdog username: ")
     # password = getpass.getpass()
+
+    username = _credentials.username
+    password = _credentials.password
 
     ### Keep as is ###
     # url = "https://underdogfantasy.com/lobby"

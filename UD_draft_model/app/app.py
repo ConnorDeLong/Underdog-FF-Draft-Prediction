@@ -17,7 +17,7 @@ import UD_draft_model.scrapers.scrape_site.scrape_league_data as scrape_site
 from UD_draft_model.modeling.model_version import ModelVersion
 
 # REMOVE LATER
-# import UD_draft_model.credentials.credentials as _credentials
+import UD_draft_model.credentials.credentials as _credentials
 
 
 @st.cache_resource
@@ -195,7 +195,6 @@ def filter_avail_players(cols: list, draft: Draft) -> pd.DataFrame:
 
 
 def display_current_next_pick(df_cur_pick: pd.DataFrame, column) -> None:
-    """ """
     current_drafter = draft.df_cur_pick["username"].iloc[0]
     current_pick = draft.df_cur_pick["current_round_pick"].iloc[0]
     user_next_pick = draft.df_cur_pick["actual_next_round_pick"].iloc[0]
@@ -331,7 +330,8 @@ if __name__ == "__main__":
 
     CHROMEDRIVER_PATH = os.environ.get("CHROMEDRIVER_PATH", "/usr/bin/chromedriver")
     MODEL_PATH = "../modeling/models"
-    MODEL = "LogisticRegression_v01_v001"
+    # MODEL = "LogisticRegression_v01_v001"
+    MODEL = "DecisionTreeClassifier_v01_v001"
 
     model = load_model(join(MODEL_PATH, MODEL))
 
@@ -340,15 +340,15 @@ if __name__ == "__main__":
         unsafe_allow_html=True,
     )
 
-    # username = _credentials.username
-    # password = _credentials.password
-    # headers = get_headers(username, password, CHROMEDRIVER_PATH, save_headers=True)
-    # valid_credentials = True
+    username = _credentials.username
+    password = _credentials.password
+    headers = get_headers(username, password, CHROMEDRIVER_PATH, save_headers=True)
+    valid_credentials = True
 
-    credentials = Credentials(CHROMEDRIVER_PATH, session_state=st.session_state)
-    credentials.enter_ud_credentials()
-    headers = credentials.headers
-    valid_credentials = credentials.valid_credentials
+    # credentials = Credentials(CHROMEDRIVER_PATH, session_state=st.session_state)
+    # credentials.enter_ud_credentials()
+    # headers = credentials.headers
+    # valid_credentials = credentials.valid_credentials
 
     # Columns to store the df of remaining players and a summary of drafted players.
     c1, c2 = st.columns([3.5, 1])
@@ -385,3 +385,11 @@ if __name__ == "__main__":
         c1.write("Draft has not been filled")
 
     c1.button("Refresh player board")
+    cols = [
+        "draft_year",
+        "drafted_player_key", "avail_player_key", "draft_id", "draft_entry_id",
+        "round", "round_pick", "diff_cur_rank_picks_btwn",
+        # "ind_picked", "m1_pred_prob", "m2_pred_prob", "m1_pred", "m2_pred"
+    ]
+    # st.write(draft.df_players)
+    # st.write(draft.df_cur_pick)

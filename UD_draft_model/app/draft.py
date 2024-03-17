@@ -726,7 +726,7 @@ class Draft(SaveSessionState):
         df_with_probs["full_name"] = (
             df_with_probs["first_name"] + " " + df_with_probs["last_name"]
         )
-        print("check")
+
         # Add team summaries, round pick string, and rename columns
         df_with_probs = self.merge_team_summaries(df_with_probs)
         df_with_probs = self.add_round_pick_str(

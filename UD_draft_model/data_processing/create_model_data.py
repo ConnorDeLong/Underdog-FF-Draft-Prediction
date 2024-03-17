@@ -5,11 +5,7 @@ import UD_draft_model.data_processing.prepare_drafts as prepare_drafts
 import UD_draft_model.data_processing.add_features as add_features
 
 
-def create_model_data(
-    folder_path: str,
-    years: list,
-    num_players: int
-) -> pd.DataFrame:
+def create_model_data(folder_path: str, years: list, num_players: int) -> pd.DataFrame:
     """
     Creates modeling data from drafts completed in the years list at
     the Draft/Pick/Available Player level where num_players
